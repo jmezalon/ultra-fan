@@ -1,0 +1,73 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  fan
+  creator
+  org_admin
+  support_admin
+}
+
+enum BroadcastState {
+  offline
+  ready
+  live
+  ended
+}
+
+model User {
+  id             String   @id
+  email          String   @unique
+  passwordHash   String
+  role           Role
+  displayName    String
+  organizationId String?
+  createdAt      DateTime
+
+  events  Event[]  @relation("ArtistEvents")
+  tickets Ticket[]
+}
+
+model Event {
+  id             String         @id
+  artistUserId   String
+  organizationId String?
+  title          String
+  description    String
+  venue          String
+  startsAt       DateTime
+  durationMin    Int
+  priceUsd       Float
+  replayHours    Int
+  published      Boolean
+  ingestUrl      String
+  streamKey      String
+  broadcastState BroadcastState
+  rehearsalActive Boolean
+  createdAt      DateTime
+
+  artist User     @relation("ArtistEvents", fields: [artistUserId], references: [id])
+  tickets Ticket[]
+
+  @@index([startsAt])
+  @@index([organizationId])
+}
+
+model Ticket {
+  id          String   @id
+  eventId     String
+  userId      String
+  purchasedAt DateTime
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([userId])
+}

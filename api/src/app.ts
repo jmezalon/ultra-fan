@@ -4,9 +4,11 @@ import express from "express";
 import { z } from "zod";
 import { signAccessToken, signPlaybackToken } from "./auth.js";
 import { AuthedRequest, requireAuth, requireRole } from "./middleware.js";
-import { canManageEvent, transitionBroadcast } from "./policy.js";
-import { events, hasTicket, id, nowIso, sanitizeUser, tickets, users } from "./store.js";
+import { MemoryRepository } from "./repositories/memory-repo.js";
+import { Repository } from "./repositories/types.js";
+import { nowIso, sanitizeUser } from "./store.js";
 import { Event } from "./types.js";
+import { canManageEvent, transitionBroadcast } from "./policy.js";
 
 const signupSchema = z.object({
   email: z.string().email(),
@@ -34,7 +36,7 @@ const createEventSchema = z.object({
 
 const updateEventSchema = createEventSchema.partial();
 
-export function buildApp() {
+export function buildApp(repo: Repository = new MemoryRepository()) {
   const app = express();
   app.use(cors());
   app.use(express.json());
@@ -50,22 +52,20 @@ export function buildApp() {
       return;
     }
 
-    const exists = users.some((u) => u.email.toLowerCase() === parsed.data.email.toLowerCase());
+    const email = parsed.data.email.toLowerCase();
+    const exists = await repo.findUserByEmail(email);
     if (exists) {
       res.status(409).json({ error: "Email already registered" });
       return;
     }
 
-    const user = {
-      id: id("usr"),
-      email: parsed.data.email.toLowerCase(),
+    const user = await repo.createUser({
+      email,
       passwordHash: await bcrypt.hash(parsed.data.password, 10),
       role: parsed.data.role,
       displayName: parsed.data.displayName,
       organizationId: parsed.data.organizationId ?? null,
-      createdAt: nowIso(),
-    };
-    users.push(user);
+    });
 
     const accessToken = signAccessToken({
       sub: user.id,
@@ -83,7 +83,7 @@ export function buildApp() {
       return;
     }
 
-    const user = users.find((u) => u.email === parsed.data.email.toLowerCase());
+    const user = await repo.findUserByEmail(parsed.data.email.toLowerCase());
     if (!user) {
       res.status(401).json({ error: "Invalid credentials" });
       return;
@@ -104,8 +104,8 @@ export function buildApp() {
     res.json({ user: sanitizeUser(user), accessToken });
   });
 
-  app.get("/me", requireAuth, (req: AuthedRequest, res) => {
-    const user = users.find((u) => u.id === req.auth?.userId);
+  app.get("/me", requireAuth, async (req: AuthedRequest, res) => {
+    const user = await repo.findUserById(req.auth!.userId);
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
@@ -113,21 +113,19 @@ export function buildApp() {
     res.json({ user: sanitizeUser(user) });
   });
 
-  app.get("/events", (_req, res) => {
-    res.json({
-      events: events.filter((e) => e.published),
-    });
+  app.get("/events", async (_req, res) => {
+    const published = await repo.listPublishedEvents();
+    res.json({ events: published });
   });
 
-  app.post("/events", requireAuth, requireRole("creator", "org_admin"), (req: AuthedRequest, res) => {
+  app.post("/events", requireAuth, requireRole("creator", "org_admin"), async (req: AuthedRequest, res) => {
     const parsed = createEventSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten() });
       return;
     }
 
-    const event: Event = {
-      id: id("evt"),
+    const event = await repo.createEvent({
       artistUserId: req.auth!.userId,
       organizationId: req.auth!.organizationId,
       title: parsed.data.title,
@@ -138,19 +136,13 @@ export function buildApp() {
       priceUsd: parsed.data.priceUsd,
       replayHours: parsed.data.replayHours,
       published: parsed.data.published,
-      ingestUrl: "rtmps://ingest.ultrafan.live/app",
-      streamKey: `uf_${id("key")}`,
-      broadcastState: "offline",
-      rehearsalActive: false,
-      createdAt: nowIso(),
-    };
+    });
 
-    events.push(event);
     res.status(201).json({ event });
   });
 
-  app.get("/events/:eventId", (req, res) => {
-    const event = events.find((e) => e.id === req.params.eventId);
+  app.get("/events/:eventId", async (req, res) => {
+    const event = await repo.findEventById(String(req.params.eventId));
     if (!event) {
       res.status(404).json({ error: "Event not found" });
       return;
@@ -158,8 +150,8 @@ export function buildApp() {
     res.json({ event });
   });
 
-  app.patch("/events/:eventId", requireAuth, requireRole("creator", "org_admin", "support_admin"), (req: AuthedRequest, res) => {
-    const event = events.find((e) => e.id === req.params.eventId);
+  app.patch("/events/:eventId", requireAuth, requireRole("creator", "org_admin", "support_admin"), async (req: AuthedRequest, res) => {
+    const event = await repo.findEventById(String(req.params.eventId));
     if (!event) {
       res.status(404).json({ error: "Event not found" });
       return;
@@ -175,43 +167,35 @@ export function buildApp() {
       return;
     }
 
-    Object.assign(event, parsed.data);
-    res.json({ event });
+    const updated = await repo.updateEvent(event.id, parsed.data as Partial<Event>);
+    res.json({ event: updated });
   });
 
-  app.post("/events/:eventId/purchase", requireAuth, requireRole("fan", "support_admin", "org_admin", "creator"), (req: AuthedRequest, res) => {
-    const event = events.find((e) => e.id === req.params.eventId);
+  app.post("/events/:eventId/purchase", requireAuth, requireRole("fan", "support_admin", "org_admin", "creator"), async (req: AuthedRequest, res) => {
+    const event = await repo.findEventById(String(req.params.eventId));
     if (!event || !event.published) {
       res.status(404).json({ error: "Event not available" });
       return;
     }
 
-    const already = hasTicket(req.auth!.userId, event.id);
+    const already = await repo.hasTicket(req.auth!.userId, event.id);
     if (already) {
       res.status(200).json({ ok: true, message: "Ticket already exists" });
       return;
     }
 
-    tickets.push({
-      id: id("tkt"),
-      eventId: event.id,
-      userId: req.auth!.userId,
-      purchasedAt: nowIso(),
-    });
+    await repo.createTicket({ userId: req.auth!.userId, eventId: event.id });
 
     res.status(201).json({ ok: true, eventId: event.id });
   });
 
-  app.get("/me/library", requireAuth, (req: AuthedRequest, res) => {
-    const myTickets = tickets.filter((t) => t.userId === req.auth!.userId);
-    const library = myTickets
-      .map((t) => events.find((e) => e.id === t.eventId))
-      .filter((e): e is Event => Boolean(e));
+  app.get("/me/library", requireAuth, async (req: AuthedRequest, res) => {
+    const library = await repo.listLibraryEvents(req.auth!.userId);
     res.json({ events: library });
   });
 
-  app.get("/events/:eventId/control-room", requireAuth, requireRole("creator", "org_admin", "support_admin"), (req: AuthedRequest, res) => {
-    const event = events.find((e) => e.id === req.params.eventId);
+  app.get("/events/:eventId/control-room", requireAuth, requireRole("creator", "org_admin", "support_admin"), async (req: AuthedRequest, res) => {
+    const event = await repo.findEventById(String(req.params.eventId));
     if (!event) {
       res.status(404).json({ error: "Event not found" });
       return;
@@ -231,8 +215,8 @@ export function buildApp() {
     });
   });
 
-  app.post("/events/:eventId/broadcast/rehearsal/start", requireAuth, requireRole("creator", "org_admin", "support_admin"), (req: AuthedRequest, res) => {
-    const event = events.find((e) => e.id === req.params.eventId);
+  app.post("/events/:eventId/broadcast/rehearsal/start", requireAuth, requireRole("creator", "org_admin", "support_admin"), async (req: AuthedRequest, res) => {
+    const event = await repo.findEventById(String(req.params.eventId));
     if (!event) {
       res.status(404).json({ error: "Event not found" });
       return;
@@ -243,16 +227,18 @@ export function buildApp() {
     }
 
     try {
-      event.broadcastState = transitionBroadcast(event.broadcastState, "rehearsal");
-      event.rehearsalActive = true;
-      res.json({ broadcastState: event.broadcastState, rehearsalActive: event.rehearsalActive });
+      const updated = await repo.updateEvent(event.id, {
+        broadcastState: transitionBroadcast(event.broadcastState, "rehearsal"),
+        rehearsalActive: true,
+      });
+      res.json({ broadcastState: updated?.broadcastState, rehearsalActive: updated?.rehearsalActive });
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
     }
   });
 
-  app.post("/events/:eventId/broadcast/go-live", requireAuth, requireRole("creator", "org_admin", "support_admin"), (req: AuthedRequest, res) => {
-    const event = events.find((e) => e.id === req.params.eventId);
+  app.post("/events/:eventId/broadcast/go-live", requireAuth, requireRole("creator", "org_admin", "support_admin"), async (req: AuthedRequest, res) => {
+    const event = await repo.findEventById(String(req.params.eventId));
     if (!event) {
       res.status(404).json({ error: "Event not found" });
       return;
@@ -263,16 +249,18 @@ export function buildApp() {
     }
 
     try {
-      event.broadcastState = transitionBroadcast(event.broadcastState, "go-live");
-      event.rehearsalActive = false;
-      res.json({ broadcastState: event.broadcastState, rehearsalActive: event.rehearsalActive });
+      const updated = await repo.updateEvent(event.id, {
+        broadcastState: transitionBroadcast(event.broadcastState, "go-live"),
+        rehearsalActive: false,
+      });
+      res.json({ broadcastState: updated?.broadcastState, rehearsalActive: updated?.rehearsalActive });
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
     }
   });
 
-  app.post("/events/:eventId/broadcast/end", requireAuth, requireRole("creator", "org_admin", "support_admin"), (req: AuthedRequest, res) => {
-    const event = events.find((e) => e.id === req.params.eventId);
+  app.post("/events/:eventId/broadcast/end", requireAuth, requireRole("creator", "org_admin", "support_admin"), async (req: AuthedRequest, res) => {
+    const event = await repo.findEventById(String(req.params.eventId));
     if (!event) {
       res.status(404).json({ error: "Event not found" });
       return;
@@ -283,22 +271,24 @@ export function buildApp() {
     }
 
     try {
-      event.broadcastState = transitionBroadcast(event.broadcastState, "end");
-      event.rehearsalActive = false;
-      res.json({ broadcastState: event.broadcastState, rehearsalActive: event.rehearsalActive });
+      const updated = await repo.updateEvent(event.id, {
+        broadcastState: transitionBroadcast(event.broadcastState, "end"),
+        rehearsalActive: false,
+      });
+      res.json({ broadcastState: updated?.broadcastState, rehearsalActive: updated?.rehearsalActive });
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
     }
   });
 
-  app.get("/events/:eventId/access-token", requireAuth, (req: AuthedRequest, res) => {
-    const event = events.find((e) => e.id === req.params.eventId);
+  app.get("/events/:eventId/access-token", requireAuth, async (req: AuthedRequest, res) => {
+    const event = await repo.findEventById(String(req.params.eventId));
     if (!event || !event.published) {
       res.status(404).json({ error: "Event not available" });
       return;
     }
 
-    const entitlement = hasTicket(req.auth!.userId, event.id);
+    const entitlement = await repo.hasTicket(req.auth!.userId, event.id);
     if (!entitlement) {
       res.status(403).json({ error: "Ticket required" });
       return;

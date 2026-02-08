@@ -14,6 +14,7 @@ This service is the first production backend slice for Ultra Fan.
 ```bash
 cd "/Users/mezalonm/Library/Mobile Documents/com~apple~CloudDocs/ultra-fan/api"
 npm install
+npm run prisma:generate
 npm run dev
 ```
 
@@ -24,6 +25,8 @@ Copy `.env.example` values into your shell or environment:
 - `PORT`
 - `JWT_SECRET`
 - `PLAYBACK_SECRET`
+- `DATABASE_URL`
+- `USE_MEMORY_DB` (`false` uses Postgres+Prisma, `true` uses in-memory repository)
 
 ## Quick curl flow
 1. Create creator account:
@@ -51,5 +54,11 @@ curl -s http://localhost:4000/events/<EVENT_ID>/access-token \
   -H "authorization: Bearer <FAN_TOKEN>"
 ```
 
-## Next step
-Replace in-memory store in `src/store.ts` with Postgres + migrations.
+## Postgres setup
+1. Start a local Postgres instance.
+2. Set `DATABASE_URL` in environment.
+3. Run:
+```bash
+npm run prisma:generate
+npm run prisma:migrate -- --name init
+```
