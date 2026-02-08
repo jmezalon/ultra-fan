@@ -2,7 +2,7 @@
 
 ## Track 1: Architecture
 Owner: Architect Agent
-Status: In progress
+Status: In progress (backend foundation started)
 
 1. Define auth/authz model with role + ownership policy matrix.
 2. Define event/broadcast/ticket/entitlement schema.
@@ -48,3 +48,4 @@ Status: In progress
 ## Decision Log
 - 2026-02-08: Added Creator Control Room as MVP-critical surface.
 - 2026-02-08: Prioritized auth/authz planning before backend feature expansion.
+- 2026-02-08: Started API implementation slice with auth, role checks, event ownership, ticket purchase, and control-room transitions.

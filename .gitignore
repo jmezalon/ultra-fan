@@ -1,0 +1,14 @@
+# Node artifacts
+node_modules/
+api/node_modules/
+api/dist/
+
+# Env
+.env
+.env.*
+api/.env
+!.env.example
+!api/.env.example
+
+# OS
+.DS_Store

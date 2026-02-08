@@ -92,3 +92,8 @@ Recommended parallel tracks:
 ## Notes
 - This repo is intentionally starting lean.
 - The agent framework in this repo is meant to accelerate parallel execution while reducing coordination risk.
+
+
+## Backend API (Now Added)
+- Initial production API scaffold is in `api/`.
+- See `api/README.md` for run instructions and endpoint flow.
