@@ -19,6 +19,7 @@ export interface CreateEventInput {
   priceUsd: number;
   replayHours: number;
   published: boolean;
+  imageUrl?: string;
 }
 
 export interface CreateTicketInput {

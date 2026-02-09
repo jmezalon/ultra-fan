@@ -46,6 +46,7 @@ export class MemoryRepository implements Repository {
       priceUsd: input.priceUsd,
       replayHours: input.replayHours,
       published: input.published,
+      imageUrl: input.imageUrl || null,
       ingestUrl: "rtmps://ingest.ultrafan.live/app",
       streamKey: `uf_${id("key")}`,
       broadcastState: "offline",

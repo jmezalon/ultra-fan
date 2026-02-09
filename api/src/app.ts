@@ -32,6 +32,7 @@ const createEventSchema = z.object({
   priceUsd: z.number().min(0),
   replayHours: z.number().int().min(0).max(168),
   published: z.boolean().default(false),
+  imageUrl: z.string().url().optional(),
 });
 
 const updateEventSchema = createEventSchema.partial();
@@ -136,6 +137,7 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       priceUsd: parsed.data.priceUsd,
       replayHours: parsed.data.replayHours,
       published: parsed.data.published,
+      imageUrl: parsed.data.imageUrl,
     });
 
     res.status(201).json({ event });
