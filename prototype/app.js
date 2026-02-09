@@ -1,5 +1,92 @@
 const CREATOR_ROLES = new Set(["creator", "org_admin", "support_admin"]);
 
+let activeHlsPlayer = null;
+
+function destroyPlayer() {
+  if (activeHlsPlayer) {
+    activeHlsPlayer.destroy();
+    activeHlsPlayer = null;
+  }
+}
+
+function initHlsPlayer(hlsUrl) {
+  destroyPlayer();
+
+  const video = document.getElementById("hlsPlayer");
+  const overlay = document.getElementById("playerOverlay");
+  if (!video) return;
+
+  // Safari supports native HLS
+  if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    video.src = hlsUrl;
+    video.addEventListener("loadedmetadata", () => {
+      if (overlay) overlay.style.display = "none";
+      video.play().catch(() => {});
+    });
+    video.addEventListener("error", () => {
+      if (overlay) {
+        overlay.querySelector(".player-status").textContent =
+          "Stream unavailable. The creator may not be broadcasting yet.";
+      }
+    });
+    return;
+  }
+
+  // Use hls.js for Chrome/Firefox
+  if (typeof Hls === "undefined" || !Hls.isSupported()) {
+    if (overlay) {
+      overlay.querySelector(".player-status").textContent =
+        "HLS playback is not supported in this browser.";
+    }
+    return;
+  }
+
+  const hls = new Hls({
+    enableWorker: true,
+    lowLatencyMode: true,
+    backBufferLength: 30,
+  });
+
+  activeHlsPlayer = hls;
+
+  hls.loadSource(hlsUrl);
+  hls.attachMedia(video);
+
+  hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    if (overlay) overlay.style.display = "none";
+    video.play().catch(() => {});
+  });
+
+  hls.on(Hls.Events.ERROR, (_event, data) => {
+    if (data.fatal) {
+      switch (data.type) {
+        case Hls.ErrorTypes.NETWORK_ERROR:
+          if (overlay) {
+            overlay.style.display = "";
+            overlay.querySelector(".player-status").textContent =
+              "Stream not found. Waiting for broadcast...";
+          }
+          setTimeout(() => {
+            if (activeHlsPlayer === hls) {
+              hls.startLoad();
+            }
+          }, 3000);
+          break;
+        case Hls.ErrorTypes.MEDIA_ERROR:
+          hls.recoverMediaError();
+          break;
+        default:
+          if (overlay) {
+            overlay.style.display = "";
+            overlay.querySelector(".player-status").textContent =
+              "Playback error. Try refreshing.";
+          }
+          break;
+      }
+    }
+  });
+}
+
 const state = {
   route: "discover",
   routeEventId: null,
@@ -10,7 +97,10 @@ const state = {
   libraryEvents: [],
   controlRooms: {},
   chat: {},
+  chatLoadedByEvent: {},
   streamInfoByEvent: {},
+  chatStream: null,
+  chatStreamEventId: null,
   loading: false,
   notice: null,
 };
@@ -161,11 +251,14 @@ function setNotice(message, tone = "info") {
 }
 
 function clearSession() {
+  closeChatStream();
   state.token = "";
   state.user = null;
   state.libraryEvents = [];
   state.controlRooms = {};
   state.streamInfoByEvent = {};
+  state.chat = {};
+  state.chatLoadedByEvent = {};
   localStorage.removeItem("ultra_fan_token");
 }
 
@@ -272,6 +365,116 @@ function mergeControlRoom(data) {
   });
 }
 
+function normalizeChatMessage(raw) {
+  return {
+    id: String(raw?.id || ""),
+    eventId: String(raw?.eventId || ""),
+    userId: String(raw?.userId || ""),
+    userDisplayName: String(raw?.userDisplayName || raw?.user || "Guest"),
+    body: String(raw?.body || raw?.message || ""),
+    createdAt: String(raw?.createdAt || new Date().toISOString()),
+  };
+}
+
+function mergeChatMessages(eventId, incomingMessages) {
+  const normalized = incomingMessages
+    .map(normalizeChatMessage)
+    .filter((m) => m.body.length > 0);
+
+  const existing = state.chat[eventId] || [];
+  const byId = new Map();
+  for (const message of existing) {
+    const key = message.id || `${message.userId}:${message.createdAt}:${message.body}`;
+    byId.set(key, message);
+  }
+  for (const message of normalized) {
+    const key = message.id || `${message.userId}:${message.createdAt}:${message.body}`;
+    byId.set(key, message);
+  }
+
+  state.chat[eventId] = [...byId.values()].sort(
+    (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
+  );
+}
+
+function renderChatMessagesMarkup(eventId) {
+  const messages = state.chat[eventId] || [];
+  if (!messages.length) {
+    return `<p class="muted" style="font-size:0.85rem;">No messages yet. Be the first!</p>`;
+  }
+
+  return messages
+    .map(
+      (item) =>
+        `<div class="chat-message"><strong>${h(item.userDisplayName)}</strong> ${h(item.body)}</div>`,
+    )
+    .join("");
+}
+
+function updateWatchChatPanel(eventId) {
+  if (state.route !== "watch" || state.routeEventId !== eventId) return;
+  const container = document.getElementById("chatMessages");
+  if (!container) return;
+  container.innerHTML = renderChatMessagesMarkup(eventId);
+}
+
+function closeChatStream() {
+  if (state.chatStream) {
+    state.chatStream.close();
+    state.chatStream = null;
+    state.chatStreamEventId = null;
+  }
+}
+
+async function loadChatHistory(eventId) {
+  if (!state.token) return;
+  const data = await apiRequest(`/events/${eventId}/chat/messages?limit=200`);
+  const messages = Array.isArray(data.messages) ? data.messages : [];
+  state.chat[eventId] = messages.map(normalizeChatMessage);
+  state.chatLoadedByEvent[eventId] = true;
+}
+
+function ensureChatStream(eventId) {
+  if (!state.token) return;
+  if (state.chatStream && state.chatStreamEventId === eventId) return;
+  if (typeof EventSource === "undefined") {
+    setNotice("This browser does not support realtime chat streaming.", "error");
+    return;
+  }
+
+  closeChatStream();
+  const streamUrl = `${state.apiBase}/events/${encodeURIComponent(
+    eventId,
+  )}/chat/stream?token=${encodeURIComponent(state.token)}`;
+  const source = new EventSource(streamUrl);
+  state.chatStream = source;
+  state.chatStreamEventId = eventId;
+
+  source.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data);
+      if (payload?.type === "chat.snapshot") {
+        mergeChatMessages(eventId, Array.isArray(payload.messages) ? payload.messages : []);
+        state.chatLoadedByEvent[eventId] = true;
+        updateWatchChatPanel(eventId);
+        return;
+      }
+      if (payload?.type === "chat.message" && payload.message) {
+        mergeChatMessages(eventId, [payload.message]);
+        updateWatchChatPanel(eventId);
+      }
+    } catch {
+      // Ignore malformed SSE payloads.
+    }
+  };
+
+  source.onerror = () => {
+    if (source.readyState === EventSource.CLOSED) {
+      closeChatStream();
+    }
+  };
+}
+
 async function ensureEvent(eventId) {
   const existing = getEvent(eventId);
   if (existing) return existing;
@@ -318,8 +521,16 @@ async function hydrateUser() {
 }
 
 async function navigateTo(route, options = {}) {
+  const targetEventId = options.eventId || null;
+  const leavingWatch =
+    state.route === "watch" &&
+    (route !== "watch" || targetEventId !== state.routeEventId);
+  if (leavingWatch) {
+    closeChatStream();
+  }
+
   state.route = route;
-  state.routeEventId = options.eventId || null;
+  state.routeEventId = targetEventId;
   setActiveNav(route);
   setLoading(true);
 
@@ -337,6 +548,11 @@ async function navigateTo(route, options = {}) {
       if (options.eventId) {
         await ensureEvent(options.eventId);
       }
+    }
+
+    if (route === "watch" && options.eventId && state.token) {
+      await loadChatHistory(options.eventId);
+      ensureChatStream(options.eventId);
     }
 
     if (route === "creator") {
@@ -519,10 +735,15 @@ function watchView(eventId) {
   let playerContent;
   if (event.broadcastState === "live" && hasAccess) {
     playerContent = `
-      <div>
-        <div class="play-icon">\u25B6</div>
-        <h3>Stream Active</h3>
-        <p>Connected &middot; Token expires in ${streamInfo.expiresInSec}s</p>
+      <video
+        id="hlsPlayer"
+        class="hls-video"
+        controls
+        autoplay
+        playsinline
+      ></video>
+      <div class="player-overlay" id="playerOverlay">
+        <p class="player-status">Connecting to stream...</p>
       </div>
     `;
   } else if (event.broadcastState === "live") {
@@ -541,9 +762,10 @@ function watchView(eventId) {
     playerContent = `<div><h3>Waiting for Stream</h3><p>The broadcast hasn't started yet. Check back at showtime.</p></div>`;
   }
 
-  const chatItems = (state.chat[eventId] || [])
-    .map((item) => `<div class="chat-message"><strong>${h(item.user)}</strong> ${h(item.message)}</div>`)
-    .join("");
+  const chatItems = renderChatMessagesMarkup(eventId);
+  const chatHint = state.token
+    ? "Realtime and synced across devices."
+    : "Sign in with a ticketed account to join live chat.";
 
   return `
     <div style="margin-bottom:1rem;">
@@ -567,10 +789,11 @@ function watchView(eventId) {
 
       <aside class="chat-panel">
         <div class="chat-header">Live Chat</div>
-        <div class="chat-messages">${chatItems || `<p class="muted" style="font-size:0.85rem;">No messages yet. Be the first!</p>`}</div>
+        <p class="muted" style="font-size:0.8rem;margin:0 0 0.5rem 0;">${h(chatHint)}</p>
+        <div id="chatMessages" class="chat-messages">${chatItems}</div>
         <div class="chat-input-row">
-          <input id="chatInput" placeholder="Say something..." />
-          <button class="btn" data-action="chat-send" data-id="${h(event.id)}">Send</button>
+          <input id="chatInput" placeholder="Say something..." ${state.token ? "" : "disabled"} />
+          <button class="btn" data-action="chat-send" data-id="${h(event.id)}" ${state.token ? "" : "disabled"}>Send</button>
         </div>
       </aside>
     </section>
@@ -830,6 +1053,9 @@ async function onCheckAccess(eventId) {
   try {
     await ensureEvent(eventId);
     const data = await apiRequest(`/events/${eventId}/access-token`);
+    if (!data.hlsUrl && data.streamPath) {
+      data.hlsUrl = `http://localhost:8888${data.streamPath}`;
+    }
     state.streamInfoByEvent[eventId] = data;
     setNotice("Playback token issued.", "success");
     await navigateTo("watch", { eventId });
@@ -984,19 +1210,24 @@ function attachEventHandlers() {
   });
 
   [...app.querySelectorAll("[data-action='chat-send']")].forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
+      if (!requireAuthRoute()) return;
+
       const eventId = button.dataset.id;
       const input = document.getElementById("chatInput");
       const message = input?.value?.trim();
       if (!message) return;
 
-      state.chat[eventId] = state.chat[eventId] || [];
-      state.chat[eventId].push({
-        user: state.user ? `@${state.user.displayName}` : "@guest",
-        message,
-      });
-      input.value = "";
-      render();
+      try {
+        await apiRequest(`/events/${eventId}/chat/messages`, {
+          method: "POST",
+          body: { body: message },
+        });
+        if (input) input.value = "";
+      } catch (err) {
+        setNotice(err.message, "error");
+        render();
+      }
     });
   });
 
@@ -1015,6 +1246,7 @@ function attachEventHandlers() {
       const formData = new FormData(apiBaseForm);
       state.apiBase = String(formData.get("apiBase") || "").trim();
       localStorage.setItem("ultra_fan_api_base", state.apiBase);
+      closeChatStream();
 
       setLoading(true);
       try {
@@ -1126,10 +1358,30 @@ function attachEventHandlers() {
 }
 
 function render() {
+  destroyPlayer();
   app.innerHTML = appTemplate();
   attachEventHandlers();
   renderUserIndicator();
   renderLoadingBar();
+
+  if (state.route === "watch" && state.routeEventId) {
+    const streamInfo = state.streamInfoByEvent[state.routeEventId];
+    const event = getEvent(state.routeEventId);
+    if (streamInfo?.hlsUrl && event?.broadcastState === "live") {
+      initHlsPlayer(streamInfo.hlsUrl);
+    }
+
+    if (state.token) {
+      if (!state.chatLoadedByEvent[state.routeEventId]) {
+        loadChatHistory(state.routeEventId)
+          .then(() => updateWatchChatPanel(state.routeEventId))
+          .catch((err) => setNotice(err.message, "error"));
+      }
+      ensureChatStream(state.routeEventId);
+    }
+  } else {
+    closeChatStream();
+  }
 }
 
 async function init() {

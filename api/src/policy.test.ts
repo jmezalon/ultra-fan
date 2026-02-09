@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canManageEvent, transitionBroadcast } from "./policy.js";
+import { canAccessEventChat, canManageEvent, transitionBroadcast } from "./policy.js";
 import { Event } from "./types.js";
 
 const event: Event = {
@@ -55,6 +55,36 @@ describe("authorization policy", () => {
       canManageEvent(
         { userId: "usr_support", role: "support_admin", organizationId: null },
         event,
+      ),
+    ).toBe(true);
+  });
+
+  it("allows ticketed fan to access chat", () => {
+    expect(
+      canAccessEventChat(
+        { userId: "usr_fan", role: "fan", organizationId: null },
+        event,
+        true,
+      ),
+    ).toBe(true);
+  });
+
+  it("denies unticketed unrelated fan from chat", () => {
+    expect(
+      canAccessEventChat(
+        { userId: "usr_fan", role: "fan", organizationId: null },
+        event,
+        false,
+      ),
+    ).toBe(false);
+  });
+
+  it("allows creator owner to access chat without ticket", () => {
+    expect(
+      canAccessEventChat(
+        { userId: "usr_artist", role: "creator", organizationId: null },
+        event,
+        false,
       ),
     ).toBe(true);
   });

@@ -9,6 +9,7 @@ This service is the first production backend slice for Ultra Fan.
 - Control room: rehearsal, go-live, end broadcast transitions
 - Tickets: purchase flow and fan library
 - Entitlement: signed short-lived playback token endpoint
+- Chat: entitlement-gated realtime event chat with 24h retention
 
 ## Run
 ```bash
@@ -51,6 +52,11 @@ curl -s -X POST http://localhost:4000/events/<EVENT_ID>/purchase \
 5. Fan requests playback token:
 ```bash
 curl -s http://localhost:4000/events/<EVENT_ID>/access-token \
+  -H "authorization: Bearer <FAN_TOKEN>"
+```
+6. Fan joins realtime chat (ticket or creator/admin ownership required):
+```bash
+curl -s http://localhost:4000/events/<EVENT_ID>/chat/messages \
   -H "authorization: Bearer <FAN_TOKEN>"
 ```
 

@@ -15,6 +15,11 @@ export function canManageEvent(auth: AuthContext | undefined, event: Event): boo
   return auth.userId === event.artistUserId;
 }
 
+export function canAccessEventChat(auth: AuthContext | undefined, event: Event, hasEntitlement: boolean): boolean {
+  if (!auth) return false;
+  return canManageEvent(auth, event) || hasEntitlement;
+}
+
 export function transitionBroadcast(current: BroadcastState, action: "rehearsal" | "go-live" | "end") {
   if (action === "rehearsal") {
     if (current === "offline" || current === "ready") return "ready" as const;

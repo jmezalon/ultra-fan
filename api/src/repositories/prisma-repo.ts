@@ -1,7 +1,14 @@
 import { prisma } from "../db.js";
 import { id, nowIso } from "../store.js";
-import { BroadcastState, Event, Role, User } from "../types.js";
-import { CreateEventInput, CreateTicketInput, CreateUserInput, Repository } from "./types.js";
+import { BroadcastState, ChatMessage, Event, Role, User } from "../types.js";
+import {
+  CreateChatMessageInput,
+  CreateEventInput,
+  CreateTicketInput,
+  CreateUserInput,
+  ListChatMessagesInput,
+  Repository,
+} from "./types.js";
 
 function mapUser(user: {
   id: string;
@@ -63,6 +70,24 @@ function mapEvent(event: {
   };
 }
 
+function mapChatMessage(message: {
+  id: string;
+  eventId: string;
+  userId: string;
+  userDisplayName: string;
+  body: string;
+  createdAt: Date;
+}): ChatMessage {
+  return {
+    id: message.id,
+    eventId: message.eventId,
+    userId: message.userId,
+    userDisplayName: message.userDisplayName,
+    body: message.body,
+    createdAt: message.createdAt.toISOString(),
+  };
+}
+
 export class PrismaRepository implements Repository {
   async findUserByEmail(email: string) {
     const user = await prisma.user.findUnique({ where: { email } });
@@ -114,7 +139,7 @@ export class PrismaRepository implements Repository {
         replayHours: input.replayHours,
         published: input.published,
         imageUrl: input.imageUrl || null,
-        ingestUrl: "rtmps://ingest.ultrafan.live/app",
+        ingestUrl: process.env.INGEST_URL ?? "rtmp://localhost:1935/live",
         streamKey: `uf_${id("key")}`,
         broadcastState: "offline",
         rehearsalActive: false,
@@ -165,5 +190,38 @@ export class PrismaRepository implements Repository {
       orderBy: { purchasedAt: "desc" },
     });
     return rows.map((t) => mapEvent(t.event));
+  }
+
+  async createChatMessage(input: CreateChatMessageInput) {
+    const row = await prisma.chatMessage.create({
+      data: {
+        id: id("msg"),
+        eventId: input.eventId,
+        userId: input.userId,
+        userDisplayName: input.userDisplayName,
+        body: input.body,
+        createdAt: new Date(nowIso()),
+      },
+    });
+    return mapChatMessage(row);
+  }
+
+  async listChatMessages(input: ListChatMessagesInput) {
+    const rows = await prisma.chatMessage.findMany({
+      where: {
+        eventId: input.eventId,
+        ...(input.since ? { createdAt: { gte: new Date(input.since) } } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: input.limit ?? 200,
+    });
+    return rows.reverse().map(mapChatMessage);
+  }
+
+  async deleteChatMessagesOlderThan(cutoffIso: string) {
+    const result = await prisma.chatMessage.deleteMany({
+      where: { createdAt: { lt: new Date(cutoffIso) } },
+    });
+    return result.count;
   }
 }
