@@ -3,21 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ultra Fan MVP Prototype</title>
+    <title>Ultra Fan Client</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <header class="site-header">
-      <div class="brand">ULTRA FAN</div>
-      <nav>
+      <div class="brand-wrap">
+        <p class="eyebrow">Live Concert Platform</p>
+        <div class="brand">ULTRA FAN</div>
+      </div>
+      <nav class="main-nav" aria-label="Primary">
         <button data-route="discover" class="nav-btn active">Discover</button>
         <button data-route="library" class="nav-btn">My Library</button>
-        <button data-route="artist" class="nav-btn">Creator Studio</button>
+        <button data-route="creator" class="nav-btn">Creator Studio</button>
         <button data-route="account" class="nav-btn">Account</button>
       </nav>
     </header>
 
-    <main id="app"></main>
+    <main id="app" aria-live="polite"></main>
 
     <script src="./app.js" type="module"></script>
   </body>

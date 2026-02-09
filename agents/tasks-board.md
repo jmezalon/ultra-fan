@@ -10,7 +10,7 @@ Status: In progress (backend foundation started)
 
 ## Track 2: Design
 Owner: Design Agent
-Status: In progress
+Status: In progress (professional-grade client UX shell implemented; validation/polish pending)
 
 1. Produce creator control-room UX for pro setup.
 2. Produce fan states for entitlement, waiting room, live, replay ended.
@@ -49,3 +49,5 @@ Status: In progress
 - 2026-02-08: Added Creator Control Room as MVP-critical surface.
 - 2026-02-08: Prioritized auth/authz planning before backend feature expansion.
 - 2026-02-08: Started API implementation slice with auth, role checks, event ownership, ticket purchase, and control-room transitions.
+- 2026-02-09: Connected prototype client to API-first fan and creator flows (`/me/library`, `/events/:id/access-token`, `/events/:id/control-room`, broadcast transition actions), including resilient error handling and route-aware data loading.
+- 2026-02-09: Replaced prototype UI shell with professional, flow-led client experience featuring explicit fan/creator journeys, stateful control-room timeline, responsive layout, and API-backed operational messaging.
