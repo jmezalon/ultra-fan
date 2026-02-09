@@ -38,3 +38,12 @@ export interface Ticket {
   userId: string;
   purchasedAt: string;
 }
+
+export interface ChatMessage {
+  id: string;
+  eventId: string;
+  userId: string;
+  userDisplayName: string;
+  body: string;
+  createdAt: string;
+}

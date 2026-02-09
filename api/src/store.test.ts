@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { events, hasTicket, resetStore, tickets, users } from "./store.js";
+import { chatMessages, events, hasTicket, resetStore, tickets, users } from "./store.js";
 
 describe("store helpers", () => {
   it("resets all in-memory collections", () => {
@@ -40,9 +40,19 @@ describe("store helpers", () => {
       purchasedAt: new Date().toISOString(),
     });
 
+    chatMessages.push({
+      id: "msg_x",
+      eventId: "evt_x",
+      userId: "usr_x",
+      userDisplayName: "X",
+      body: "hello world",
+      createdAt: new Date().toISOString(),
+    });
+
     expect(users.length).toBe(1);
     expect(events.length).toBe(1);
     expect(tickets.length).toBe(1);
+    expect(chatMessages.length).toBe(1);
     expect(hasTicket("usr_x", "evt_x")).toBe(true);
 
     resetStore();
@@ -50,5 +60,6 @@ describe("store helpers", () => {
     expect(users.length).toBe(0);
     expect(events.length).toBe(0);
     expect(tickets.length).toBe(0);
+    expect(chatMessages.length).toBe(0);
   });
 });

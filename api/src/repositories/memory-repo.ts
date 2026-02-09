@@ -1,6 +1,13 @@
-import { events, hasTicket, id, nowIso, tickets, users } from "../store.js";
-import { Event } from "../types.js";
-import { CreateEventInput, CreateTicketInput, CreateUserInput, Repository } from "./types.js";
+import { chatMessages, events, hasTicket, id, nowIso, tickets, users } from "../store.js";
+import { ChatMessage, Event } from "../types.js";
+import {
+  CreateChatMessageInput,
+  CreateEventInput,
+  CreateTicketInput,
+  CreateUserInput,
+  ListChatMessagesInput,
+  Repository,
+} from "./types.js";
 
 export class MemoryRepository implements Repository {
   async findUserByEmail(email: string) {
@@ -47,7 +54,7 @@ export class MemoryRepository implements Repository {
       replayHours: input.replayHours,
       published: input.published,
       imageUrl: input.imageUrl || null,
-      ingestUrl: "rtmps://ingest.ultrafan.live/app",
+      ingestUrl: process.env.INGEST_URL ?? "rtmp://localhost:1935/live",
       streamKey: `uf_${id("key")}`,
       broadcastState: "offline",
       rehearsalActive: false,
@@ -82,5 +89,35 @@ export class MemoryRepository implements Repository {
     return myTickets
       .map((t) => events.find((e) => e.id === t.eventId))
       .filter((e): e is Event => Boolean(e));
+  }
+
+  async createChatMessage(input: CreateChatMessageInput) {
+    const message: ChatMessage = {
+      id: id("msg"),
+      eventId: input.eventId,
+      userId: input.userId,
+      userDisplayName: input.userDisplayName,
+      body: input.body,
+      createdAt: nowIso(),
+    };
+    chatMessages.push(message);
+    return message;
+  }
+
+  async listChatMessages(input: ListChatMessagesInput) {
+    const sinceMs = input.since ? Date.parse(input.since) : Number.NEGATIVE_INFINITY;
+    const limit = input.limit ?? 200;
+    return chatMessages
+      .filter((m) => m.eventId === input.eventId && Date.parse(m.createdAt) >= sinceMs)
+      .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+      .slice(-limit);
+  }
+
+  async deleteChatMessagesOlderThan(cutoffIso: string) {
+    const cutoff = Date.parse(cutoffIso);
+    const before = chatMessages.length;
+    const kept = chatMessages.filter((m) => Date.parse(m.createdAt) >= cutoff);
+    chatMessages.splice(0, chatMessages.length, ...kept);
+    return before - kept.length;
   }
 }

@@ -1,4 +1,4 @@
-import { Event, Role, User } from "../types.js";
+import { ChatMessage, Event, Role, User } from "../types.js";
 
 export interface CreateUserInput {
   email: string;
@@ -27,6 +27,19 @@ export interface CreateTicketInput {
   eventId: string;
 }
 
+export interface CreateChatMessageInput {
+  eventId: string;
+  userId: string;
+  userDisplayName: string;
+  body: string;
+}
+
+export interface ListChatMessagesInput {
+  eventId: string;
+  since?: string;
+  limit?: number;
+}
+
 export interface Repository {
   findUserByEmail(email: string): Promise<User | null>;
   findUserById(userId: string): Promise<User | null>;
@@ -40,4 +53,8 @@ export interface Repository {
   hasTicket(userId: string, eventId: string): Promise<boolean>;
   createTicket(input: CreateTicketInput): Promise<void>;
   listLibraryEvents(userId: string): Promise<Event[]>;
+
+  createChatMessage(input: CreateChatMessageInput): Promise<ChatMessage>;
+  listChatMessages(input: ListChatMessagesInput): Promise<ChatMessage[]>;
+  deleteChatMessagesOlderThan(cutoffIso: string): Promise<number>;
 }

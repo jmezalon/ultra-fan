@@ -1,14 +1,14 @@
 import bcrypt from "bcryptjs";
 import cors from "cors";
-import express from "express";
+import express, { Request, Response } from "express";
 import { z } from "zod";
-import { signAccessToken, signPlaybackToken } from "./auth.js";
+import { signAccessToken, signPlaybackToken, verifyAccessToken } from "./auth.js";
 import { AuthedRequest, requireAuth, requireRole } from "./middleware.js";
 import { MemoryRepository } from "./repositories/memory-repo.js";
 import { Repository } from "./repositories/types.js";
 import { nowIso, sanitizeUser } from "./store.js";
 import { Event } from "./types.js";
-import { canManageEvent, transitionBroadcast } from "./policy.js";
+import { canAccessEventChat, canManageEvent, transitionBroadcast } from "./policy.js";
 
 const signupSchema = z.object({
   email: z.string().email(),
@@ -37,10 +37,79 @@ const createEventSchema = z.object({
 
 const updateEventSchema = createEventSchema.partial();
 
+const chatMessageSchema = z.object({
+  body: z.string().trim().min(1).max(600),
+});
+
+const chatListQuerySchema = z.object({
+  since: z.string().datetime().optional(),
+  limit: z.coerce.number().int().min(1).max(300).default(200),
+});
+
+const CHAT_RETENTION_HOURS = 24;
+const CHAT_KEEPALIVE_MS = 15_000;
+
 export function buildApp(repo: Repository = new MemoryRepository()) {
   const app = express();
   app.use(cors());
   app.use(express.json());
+  const chatStreams = new Map<string, Set<Response>>();
+
+  const chatCutoffIso = () =>
+    new Date(Date.now() - CHAT_RETENTION_HOURS * 60 * 60 * 1000).toISOString();
+
+  async function enforceChatRetentionWindow() {
+    await repo.deleteChatMessagesOlderThan(chatCutoffIso());
+  }
+
+  function openChatStream(eventId: string, res: Response) {
+    const subscribers = chatStreams.get(eventId) ?? new Set<Response>();
+    subscribers.add(res);
+    chatStreams.set(eventId, subscribers);
+  }
+
+  function closeChatStream(eventId: string, res: Response) {
+    const subscribers = chatStreams.get(eventId);
+    if (!subscribers) return;
+    subscribers.delete(res);
+    if (subscribers.size === 0) {
+      chatStreams.delete(eventId);
+    }
+  }
+
+  function publishChatEvent(eventId: string, payload: unknown) {
+    const subscribers = chatStreams.get(eventId);
+    if (!subscribers?.size) return;
+    const frame = `data: ${JSON.stringify(payload)}\n\n`;
+    for (const stream of subscribers) {
+      stream.write(frame);
+    }
+  }
+
+  async function canUseChat(auth: NonNullable<AuthedRequest["auth"]>, event: Event) {
+    const entitlement = await repo.hasTicket(auth.userId, event.id);
+    return canAccessEventChat(auth, event, entitlement);
+  }
+
+  function readSseAuth(req: Request): AuthedRequest["auth"] | null {
+    const header = req.header("authorization");
+    const queryToken = typeof req.query.token === "string" ? req.query.token : null;
+    const bearerToken = header?.startsWith("Bearer ")
+      ? header.slice("Bearer ".length)
+      : null;
+    const token = bearerToken ?? queryToken;
+    if (!token) return null;
+    try {
+      const claims = verifyAccessToken(token);
+      return {
+        userId: claims.sub,
+        role: claims.role,
+        organizationId: claims.organizationId,
+      };
+    } catch {
+      return null;
+    }
+  }
 
   app.get("/health", (_req, res) => {
     res.json({ ok: true, service: "ultra-fan-api", now: nowIso() });
@@ -196,6 +265,126 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
     res.json({ events: library });
   });
 
+  app.get("/events/:eventId/chat/messages", requireAuth, async (req: AuthedRequest, res) => {
+    const event = await repo.findEventById(String(req.params.eventId));
+    if (!event) {
+      res.status(404).json({ error: "Event not found" });
+      return;
+    }
+
+    const allowed = await canUseChat(req.auth!, event);
+    if (!allowed) {
+      res.status(403).json({ error: "Ticket required for chat access" });
+      return;
+    }
+
+    const parsed = chatListQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+
+    await enforceChatRetentionWindow();
+
+    const cutoff = chatCutoffIso();
+    const since =
+      parsed.data.since && Date.parse(parsed.data.since) > Date.parse(cutoff)
+        ? parsed.data.since
+        : cutoff;
+    const messages = await repo.listChatMessages({
+      eventId: event.id,
+      since,
+      limit: parsed.data.limit,
+    });
+
+    res.json({ eventId: event.id, retentionHours: CHAT_RETENTION_HOURS, messages });
+  });
+
+  app.post("/events/:eventId/chat/messages", requireAuth, async (req: AuthedRequest, res) => {
+    const parsedBody = chatMessageSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      res.status(400).json({ error: parsedBody.error.flatten() });
+      return;
+    }
+
+    const event = await repo.findEventById(String(req.params.eventId));
+    if (!event) {
+      res.status(404).json({ error: "Event not found" });
+      return;
+    }
+
+    const allowed = await canUseChat(req.auth!, event);
+    if (!allowed) {
+      res.status(403).json({ error: "Ticket required for chat access" });
+      return;
+    }
+
+    const sender = await repo.findUserById(req.auth!.userId);
+    if (!sender) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    await enforceChatRetentionWindow();
+
+    const message = await repo.createChatMessage({
+      eventId: event.id,
+      userId: sender.id,
+      userDisplayName: sender.displayName,
+      body: parsedBody.data.body,
+    });
+
+    publishChatEvent(event.id, { type: "chat.message", message });
+    res.status(201).json({ message });
+  });
+
+  app.get("/events/:eventId/chat/stream", async (req, res) => {
+    const auth = readSseAuth(req);
+    if (!auth) {
+      res.status(401).json({ error: "Missing or invalid token" });
+      return;
+    }
+
+    const event = await repo.findEventById(String(req.params.eventId));
+    if (!event) {
+      res.status(404).json({ error: "Event not found" });
+      return;
+    }
+
+    const allowed = await canUseChat(auth, event);
+    if (!allowed) {
+      res.status(403).json({ error: "Ticket required for chat access" });
+      return;
+    }
+
+    await enforceChatRetentionWindow();
+    const messages = await repo.listChatMessages({
+      eventId: event.id,
+      since: chatCutoffIso(),
+      limit: 200,
+    });
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    const snapshot = { type: "chat.snapshot", messages };
+    res.write(`data: ${JSON.stringify(snapshot)}\n\n`);
+
+    openChatStream(event.id, res);
+    const keepalive = setInterval(() => {
+      res.write(": keepalive\n\n");
+    }, CHAT_KEEPALIVE_MS);
+
+    req.on("close", () => {
+      clearInterval(keepalive);
+      closeChatStream(event.id, res);
+      res.end();
+    });
+  });
+
   app.get("/events/:eventId/control-room", requireAuth, requireRole("creator", "org_admin", "support_admin"), async (req: AuthedRequest, res) => {
     const event = await repo.findEventById(String(req.params.eventId));
     if (!event) {
@@ -302,10 +491,13 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       expiresInSec: 5 * 60,
     });
 
+    const hlsBaseUrl = process.env.HLS_BASE_URL ?? "http://localhost:8888";
+
     res.json({
       playbackToken: token,
       eventId: event.id,
-      streamPath: `/hls/${event.id}/index.m3u8`,
+      hlsUrl: `${hlsBaseUrl}/live/${event.streamKey}/index.m3u8`,
+      streamPath: `/live/${event.streamKey}/index.m3u8`,
       expiresInSec: 300,
     });
   });
