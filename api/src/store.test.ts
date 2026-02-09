@@ -20,6 +20,7 @@ describe("store helpers", () => {
       title: "title",
       description: "description",
       venue: "venue",
+      imageUrl: null,
       startsAt: new Date().toISOString(),
       durationMin: 60,
       priceUsd: 10,

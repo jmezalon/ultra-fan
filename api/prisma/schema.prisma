@@ -41,6 +41,7 @@ model Event {
   title          String
   description    String
   venue          String
+  imageUrl       String?
   startsAt       DateTime
   durationMin    Int
   priceUsd       Float

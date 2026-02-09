@@ -38,6 +38,7 @@ function mapEvent(event: {
   ingestUrl: string;
   streamKey: string;
   broadcastState: string;
+  imageUrl?: string | null;
   rehearsalActive: boolean;
   createdAt: Date;
 }): Event {
@@ -53,6 +54,7 @@ function mapEvent(event: {
     priceUsd: event.priceUsd,
     replayHours: event.replayHours,
     published: event.published,
+    imageUrl: event.imageUrl ?? null,
     ingestUrl: event.ingestUrl,
     streamKey: event.streamKey,
     broadcastState: event.broadcastState as BroadcastState,
@@ -111,6 +113,7 @@ export class PrismaRepository implements Repository {
         priceUsd: input.priceUsd,
         replayHours: input.replayHours,
         published: input.published,
+        imageUrl: input.imageUrl || null,
         ingestUrl: "rtmps://ingest.ultrafan.live/app",
         streamKey: `uf_${id("key")}`,
         broadcastState: "offline",

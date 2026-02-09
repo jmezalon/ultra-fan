@@ -9,6 +9,7 @@ const event: Event = {
   title: "Live Show",
   description: "desc",
   venue: "NY",
+  imageUrl: null,
   startsAt: "2026-03-14T21:00:00Z",
   durationMin: 90,
   priceUsd: 14.99,

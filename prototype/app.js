@@ -88,8 +88,67 @@ function setActiveNav(route) {
   navButtons.find((button) => button.dataset.route === navRoute)?.classList.add("active");
 }
 
+/* ── Toast Notification System ── */
+
+function showToast(message, tone = "info") {
+  const container = document.getElementById("toastContainer");
+  if (!container) return;
+
+  const icons = { success: "\u2713", error: "\u2717", info: "\u2139" };
+  const toast = document.createElement("div");
+  toast.className = `toast ${tone}`;
+  toast.innerHTML = `
+    <span class="toast-icon">${icons[tone] || icons.info}</span>
+    <span>${message}</span>
+  `;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add("toast-out");
+    toast.addEventListener("animationend", () => toast.remove());
+  }, 3500);
+}
+
+/* ── Loading Bar ── */
+
+function renderLoadingBar() {
+  const existing = document.querySelector(".loading-bar");
+  if (state.loading && !existing) {
+    const bar = document.createElement("div");
+    bar.className = "loading-bar";
+    document.body.appendChild(bar);
+  } else if (!state.loading && existing) {
+    existing.remove();
+  }
+}
+
+/* ── User Indicator ── */
+
+function renderUserIndicator() {
+  const el = document.getElementById("userIndicator");
+  if (!el) return;
+
+  if (state.user) {
+    const initials = (state.user.displayName || "U")
+      .split(" ")
+      .map((w) => w[0])
+      .join("")
+      .slice(0, 2);
+    el.innerHTML = `
+      <div class="user-avatar">${h(initials)}</div>
+      <span>${h(state.user.displayName)}</span>
+    `;
+  } else {
+    el.innerHTML = `<button class="btn ghost" style="padding:0.35rem 0.75rem;font-size:0.8rem;">Sign In</button>`;
+    el.querySelector("button")?.addEventListener("click", () => navigateTo("account"));
+  }
+}
+
+/* ── State Helpers ── */
+
 function setLoading(loading) {
   state.loading = loading;
+  renderLoadingBar();
 }
 
 function setNotice(message, tone = "info") {
@@ -98,6 +157,7 @@ function setNotice(message, tone = "info") {
     return;
   }
   state.notice = { message, tone };
+  showToast(message, tone);
 }
 
 function clearSession() {
@@ -111,7 +171,7 @@ function clearSession() {
 
 function requireAuthRoute() {
   if (state.token) return true;
-  setNotice("Sign in first to continue this step.", "info");
+  setNotice("Sign in first to continue.", "info");
   state.route = "account";
   state.routeEventId = null;
   setActiveNav("account");
@@ -298,93 +358,42 @@ async function navigateTo(route, options = {}) {
   }
 }
 
+/* ── View: Hero ── */
+
 function renderHero() {
-  const roleLabel = state.user ? `${h(state.user.displayName)} (${h(state.user.role)})` : "Guest";
+  if (state.route !== "discover") return "";
 
   return `
     <section class="hero">
-      <h1>Clear fan and creator journeys, powered by your live API.</h1>
-      <p>
-        Fan flow: discover -> event details -> purchase -> library -> watch.
-        Creator flow: event setup -> control room -> rehearsal -> live -> ended.
-      </p>
-      <p class="muted">Session: ${roleLabel} | API: ${h(state.apiBase)}</p>
-      ${state.loading ? `<p class="loading">Loading latest state...</p>` : ""}
-      ${
-        state.notice
-          ? `<div class="notice ${h(state.notice.tone)}">${h(state.notice.message)}</div>`
-          : ""
-      }
+      <h1>Live concerts,<br>everywhere.</h1>
+      <p class="hero-subtitle">Experience world-class performances streamed live from the biggest stages. Get your ticket, show up, feel the energy.</p>
+      <div class="hero-cta">
+        <button class="btn" data-action="go-discover" style="background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.2);color:#fff;backdrop-filter:blur(4px);">Browse Events</button>
+      </div>
     </section>
   `;
 }
 
-function fanJourneyPanel() {
-  const eventStepActive = state.route === "event" || state.route === "watch";
-  return `
-    <article class="panel">
-      <h2>Fan Journey</h2>
-      <p class="muted">Each step is explicit so users never wonder what to do next.</p>
-      <div class="stage-grid">
-        <div class="stage ${state.route === "discover" ? "active" : ""}">
-          <strong>1. Discover</strong>
-          <span>Browse published events.</span>
-        </div>
-        <div class="stage ${eventStepActive ? "active" : ""}">
-          <strong>2. Event Detail</strong>
-          <span>Confirm timing, price, and access state.</span>
-        </div>
-        <div class="stage ${state.route === "library" ? "active" : ""}">
-          <strong>3. Library</strong>
-          <span>See your purchased events.</span>
-        </div>
-        <div class="stage ${state.route === "watch" ? "active" : ""}">
-          <strong>4. Watch</strong>
-          <span>Request entitlement token and enter stream.</span>
-        </div>
-      </div>
-    </article>
-  `;
-}
-
-function creatorJourneyPanel() {
-  const routeActive = state.route === "creator" || state.route === "control";
-  return `
-    <aside class="panel">
-      <h3>Creator Operations</h3>
-      <p class="muted">Control room transitions follow API policy: offline -> ready -> live -> ended.</p>
-      <ul class="rail-list">
-        <li><strong>${routeActive ? "Active" : "Ready"}</strong>: creator dashboard and event setup</li>
-        <li><strong>Pre-live</strong>: ingest details + rehearsal checks in control room</li>
-        <li><strong>Broadcast</strong>: go live once ready, then end stream deterministically</li>
-      </ul>
-      <div class="row">
-        <button class="btn ghost" data-action="go-discover">Fan View</button>
-        <button class="btn ghost" data-action="go-creator">Creator View</button>
-      </div>
-    </aside>
-  `;
-}
+/* ── View: Discover ── */
 
 function discoverView() {
   const publishedEvents = state.events.filter((event) => event.published !== false);
   const cards = publishedEvents
     .map((event) => {
-      const ticketLabel = hasTicket(event.id) ? "Ticketed" : "Not Ticketed";
+      const ticketLabel = hasTicket(event.id) ? "Ticketed \u2713" : formatMoney(event.priceUsd);
       return `
-        <article class="card">
-          <div class="media"></div>
+        <article class="card" data-action="view-event" data-id="${h(event.id)}">
+          <div class="media">
+            ${event.imageUrl ? `<img src="${h(event.imageUrl)}" alt="${h(event.title)}" />` : ""}
+            <div class="card-badge">${statusBadge(event.broadcastState)}</div>
+          </div>
           <div class="card-body">
-            <div class="row" style="justify-content:space-between;">
-              <h3>${h(event.title)}</h3>
-              ${statusBadge(event.broadcastState)}
-            </div>
-            <p class="muted">${h(event.venue)} | ${h(formatDateTime(event.startsAt))}</p>
-            <p class="muted">${h(formatMoney(event.priceUsd))} | ${ticketLabel}</p>
-            <p>${h(event.description)}</p>
-            <div class="row">
-              <button class="btn primary" data-action="view-event" data-id="${h(event.id)}">Open Event</button>
-              <button class="btn" data-action="buy" data-id="${h(event.id)}">Buy Ticket</button>
+            <h3>${h(event.title)}</h3>
+            <p class="card-meta">${h(event.venue)} &middot; ${h(formatDateTime(event.startsAt))}</p>
+            <p class="card-price">${ticketLabel}</p>
+            <div class="card-actions">
+              <button class="btn primary" data-action="view-event" data-id="${h(event.id)}">View Details</button>
+              <button class="btn" data-action="buy" data-id="${h(event.id)}">Get Ticket</button>
             </div>
           </div>
         </article>
@@ -393,48 +402,59 @@ function discoverView() {
     .join("");
 
   return `
+    <div style="margin-top:1.5rem;">
+      <h2 class="section-title">Upcoming Events</h2>
+      <p class="section-subtitle">Grab your tickets before they sell out</p>
+    </div>
     <section class="grid">
-      ${cards || `<article class="panel"><p>No published events yet.</p></article>`}
+      ${cards || `<article class="panel" style="grid-column:1/-1;text-align:center;padding:3rem;"><p class="muted">No events available yet. Check back soon.</p></article>`}
     </section>
   `;
 }
 
+/* ── View: Event Detail ── */
+
 function eventDetailView(eventId) {
   const event = getEvent(eventId);
   if (!event) {
-    return `<section class="panel"><p>Event not found.</p></section>`;
+    return `<section class="panel" style="text-align:center;padding:3rem;"><p class="muted">Event not found.</p></section>`;
   }
 
   const userHasTicket = hasTicket(event.id);
 
   return `
+    <section class="hero" style="min-height:180px;margin-bottom:1.5rem;${event.imageUrl ? `background-image:linear-gradient(rgba(10,10,15,0.55),rgba(10,10,15,0.75)),url('${h(event.imageUrl)}');background-size:cover;background-position:center;` : ""}">
+      <div class="row" style="justify-content:space-between;align-items:flex-start;position:relative;">
+        <div>
+          <h1>${h(event.title)}</h1>
+          <p class="hero-subtitle">${h(event.venue)} &middot; ${h(formatDateTime(event.startsAt))}</p>
+        </div>
+        <div style="position:relative;">${statusBadge(event.broadcastState)}</div>
+      </div>
+    </section>
+
     <section class="layout">
       <article class="panel">
-        <div class="row" style="justify-content:space-between;">
-          <h2>${h(event.title)}</h2>
-          ${statusBadge(event.broadcastState)}
-        </div>
-        <p class="muted">${h(formatDateTime(event.startsAt))} | ${h(event.venue)}</p>
-        <p>${h(event.description)}</p>
-        <p><strong>Ticket:</strong> ${h(formatMoney(event.priceUsd))}</p>
-        <div class="row">
-          <button class="btn primary" data-action="buy" data-id="${h(event.id)}">${userHasTicket ? "Buy Again (No-op)" : "Buy Ticket"}</button>
-          <button class="btn" data-action="check-access" data-id="${h(event.id)}">Request Access Token</button>
-          <button class="btn" data-action="go-library">Go To Library</button>
-          ${canManageEvent(event) ? `<button class="btn" data-action="open-control-room" data-id="${h(event.id)}">Open Control Room</button>` : ""}
+        <h3>About This Event</h3>
+        <p style="margin-top:0.5rem;color:var(--ink-secondary);">${h(event.description)}</p>
+        <p style="margin-top:0.75rem;"><strong style="color:var(--accent);font-size:1.25rem;">${h(formatMoney(event.priceUsd))}</strong></p>
+        <div class="row" style="margin-top:1rem;">
+          <button class="btn primary" data-action="buy" data-id="${h(event.id)}">${userHasTicket ? "Ticket Purchased" : "Buy Ticket"}</button>
+          <button class="btn" data-action="check-access" data-id="${h(event.id)}">Enter Stream</button>
+          ${canManageEvent(event) ? `<button class="btn ghost" data-action="open-control-room" data-id="${h(event.id)}">Control Room</button>` : ""}
         </div>
       </article>
 
       <aside class="panel">
-        <h3>What Happens Next</h3>
-        <ul class="rail-list">
-          <li>Buy ticket to create entitlement record.</li>
-          <li>Use access token check to validate stream permission.</li>
-          <li>Watch stream from player page with explicit status messaging.</li>
-        </ul>
-        ${state.user ? `<p class="muted">Signed in as ${h(state.user.displayName)}.</p>` : `<p class="muted">Sign in before purchase or playback access.</p>`}
-        <div class="row">
-          <button class="btn ghost" data-action="go-discover">Back To Discover</button>
+        <h3>Event Info</h3>
+        <div style="margin-top:0.75rem;display:grid;gap:0.75rem;">
+          <div class="kpi"><p class="label">Date</p><p class="value" style="font-size:1rem;">${h(formatDateTime(event.startsAt))}</p></div>
+          <div class="kpi"><p class="label">Venue</p><p class="value" style="font-size:1rem;">${h(event.venue)}</p></div>
+          <div class="kpi"><p class="label">Duration</p><p class="value" style="font-size:1rem;">${event.durationMin ? event.durationMin + " min" : "TBD"}</p></div>
+        </div>
+        <div class="row" style="margin-top:1rem;">
+          <button class="btn ghost" data-action="go-discover">Back to Events</button>
+          <button class="btn ghost" data-action="go-library">My Library</button>
           ${!state.user ? `<button class="btn" data-action="go-account">Sign In</button>` : ""}
         </div>
       </aside>
@@ -442,13 +462,15 @@ function eventDetailView(eventId) {
   `;
 }
 
+/* ── View: Library ── */
+
 function libraryView() {
   if (!state.user) {
     return `
-      <section class="panel">
+      <section class="panel" style="text-align:center;padding:3rem;">
         <h2>My Library</h2>
-        <p>Sign in to load purchased events.</p>
-        <button class="btn primary" data-action="go-account">Go To Account</button>
+        <p class="muted" style="margin:0.75rem 0;">Sign in to see your purchased events.</p>
+        <button class="btn primary" data-action="go-account">Sign In</button>
       </section>
     `;
   }
@@ -457,12 +479,16 @@ function libraryView() {
     .map(
       (event) => `
         <article class="card">
+          <div class="media">
+            ${event.imageUrl ? `<img src="${h(event.imageUrl)}" alt="${h(event.title)}" />` : ""}
+            <div class="card-badge">${statusBadge(event.broadcastState)}</div>
+          </div>
           <div class="card-body">
             <h3>${h(event.title)}</h3>
-            <p class="muted">${h(formatDateTime(event.startsAt))} | ${h(event.venue)}</p>
-            <div class="row">
-              <button class="btn" data-action="view-event" data-id="${h(event.id)}">Event Detail</button>
-              <button class="btn primary" data-action="check-access" data-id="${h(event.id)}">Enter Stream</button>
+            <p class="card-meta">${h(formatDateTime(event.startsAt))} &middot; ${h(event.venue)}</p>
+            <div class="card-actions">
+              <button class="btn primary" data-action="check-access" data-id="${h(event.id)}">Watch Now</button>
+              <button class="btn ghost" data-action="view-event" data-id="${h(event.id)}">Details</button>
             </div>
           </div>
         </article>
@@ -471,66 +497,79 @@ function libraryView() {
     .join("");
 
   return `
-    <section class="panel">
-      <h2>My Library</h2>
-      <p class="muted">Source: <code>/me/library</code></p>
-    </section>
-    <section class="grid">${cards || `<article class="panel"><p>No ticketed events yet.</p></article>`}</section>
+    <div>
+      <h2 class="section-title">My Library</h2>
+      <p class="section-subtitle">${state.libraryEvents.length} event${state.libraryEvents.length !== 1 ? "s" : ""} in your collection</p>
+    </div>
+    <section class="grid">${cards || `<article class="panel" style="grid-column:1/-1;text-align:center;padding:3rem;"><p class="muted">No tickets yet. Browse events to get started.</p><button class="btn primary" data-action="go-discover" style="margin-top:0.75rem;">Discover Events</button></article>`}</section>
   `;
 }
+
+/* ── View: Watch ── */
 
 function watchView(eventId) {
   const event = getEvent(eventId);
   if (!event) {
-    return `<section class="panel"><p>Event not found for playback.</p></section>`;
+    return `<section class="panel" style="text-align:center;padding:3rem;"><p class="muted">Event not found.</p></section>`;
   }
 
   const streamInfo = state.streamInfoByEvent[eventId];
-  const playerMessage = streamInfo
-    ? `Access granted. Path: ${streamInfo.streamPath}. Token expiry: ${streamInfo.expiresInSec}s.`
-    : "No playback token yet. Use Request Access Token.";
+  const hasAccess = Boolean(streamInfo);
 
-  const incidentCopy =
-    event.broadcastState === "offline"
-      ? "Broadcast has not started. Stay on this page and retry access after go-live."
-      : event.broadcastState === "ready"
-        ? "Creator rehearsal is active. Public stream is opening soon."
-        : event.broadcastState === "ended"
-          ? "Broadcast ended. Replay access depends on event replay window."
-          : "Live stream is active.";
+  let playerContent;
+  if (event.broadcastState === "live" && hasAccess) {
+    playerContent = `
+      <div>
+        <div class="play-icon">\u25B6</div>
+        <h3>Stream Active</h3>
+        <p>Connected &middot; Token expires in ${streamInfo.expiresInSec}s</p>
+      </div>
+    `;
+  } else if (event.broadcastState === "live") {
+    playerContent = `
+      <div>
+        <div class="play-icon">\u25B6</div>
+        <h3>Stream is Live</h3>
+        <p>Request access to start watching</p>
+      </div>
+    `;
+  } else if (event.broadcastState === "ready") {
+    playerContent = `<div><h3>Starting Soon</h3><p>The artist is preparing. Stream will begin shortly.</p></div>`;
+  } else if (event.broadcastState === "ended") {
+    playerContent = `<div><h3>Stream Ended</h3><p>This broadcast has concluded.</p></div>`;
+  } else {
+    playerContent = `<div><h3>Waiting for Stream</h3><p>The broadcast hasn't started yet. Check back at showtime.</p></div>`;
+  }
 
   const chatItems = (state.chat[eventId] || [])
-    .map((item) => `<p><strong>${h(item.user)}</strong> ${h(item.message)}</p>`)
+    .map((item) => `<div class="chat-message"><strong>${h(item.user)}</strong> ${h(item.message)}</div>`)
     .join("");
 
   return `
+    <div style="margin-bottom:1rem;">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <div>
+          <h2 class="section-title">${h(event.title)}</h2>
+          <p class="section-subtitle" style="margin-bottom:0;">${h(event.venue)} &middot; ${h(formatDateTime(event.startsAt))}</p>
+        </div>
+        ${statusBadge(event.broadcastState)}
+      </div>
+    </div>
+
     <section class="layout">
-      <article class="panel">
-        <div class="row" style="justify-content:space-between;">
-          <h2>${h(event.title)}</h2>
-          ${statusBadge(event.broadcastState)}
-        </div>
-        <p class="muted">${h(formatDateTime(event.startsAt))} | ${h(event.venue)}</p>
-        <div class="player">
-          <div>
-            <h3>Playback Surface</h3>
-            <p>${h(playerMessage)}</p>
-            <p class="muted">${h(incidentCopy)}</p>
-          </div>
-        </div>
-        <div class="row" style="margin-top:0.8rem;">
-          <button class="btn primary" data-action="check-access" data-id="${h(event.id)}">Request Access Token</button>
-          <button class="btn" data-action="view-event" data-id="${h(event.id)}">Event Detail</button>
+      <article>
+        <div class="player">${playerContent}</div>
+        <div class="row" style="margin-top:0.85rem;">
+          <button class="btn primary" data-action="check-access" data-id="${h(event.id)}">Request Access</button>
+          <button class="btn ghost" data-action="view-event" data-id="${h(event.id)}">Event Details</button>
         </div>
       </article>
 
-      <aside class="panel side-stack">
-        <div>
-          <h3>Live Chat (Local Demo)</h3>
-          <div>${chatItems || `<p class="muted">No messages yet.</p>`}</div>
-        </div>
-        <div>
-          <input id="chatInput" placeholder="Type message" />
+      <aside class="chat-panel">
+        <div class="chat-header">Live Chat</div>
+        <div class="chat-messages">${chatItems || `<p class="muted" style="font-size:0.85rem;">No messages yet. Be the first!</p>`}</div>
+        <div class="chat-input-row">
+          <input id="chatInput" placeholder="Say something..." />
           <button class="btn" data-action="chat-send" data-id="${h(event.id)}">Send</button>
         </div>
       </aside>
@@ -538,29 +577,31 @@ function watchView(eventId) {
   `;
 }
 
+/* ── View: Creator Studio ── */
+
 function creatorView() {
   if (!state.user) {
     return `
-      <section class="panel">
+      <section class="panel" style="text-align:center;padding:3rem;">
         <h2>Creator Studio</h2>
-        <p>Sign in as <code>creator</code> or <code>org_admin</code> to manage events.</p>
-        <button class="btn primary" data-action="go-account">Go To Account</button>
+        <p class="muted" style="margin:0.75rem 0;">Sign in with a creator account to manage events.</p>
+        <button class="btn primary" data-action="go-account">Sign In</button>
       </section>
     `;
   }
 
   if (!isCreatorUser()) {
     return `
-      <section class="panel">
+      <section class="panel" style="text-align:center;padding:3rem;">
         <h2>Creator Studio</h2>
-        <p>Your role is <strong>${h(state.user.role)}</strong>. Creator access requires creator/admin role.</p>
+        <p class="muted" style="margin:0.75rem 0;">Your role is <strong>${h(state.user.role)}</strong>. Creator or admin access is required.</p>
       </section>
     `;
   }
 
   const managedEvents = listManagedEvents();
-  const liveCount = managedEvents.filter((event) => event.broadcastState === "live").length;
-  const publishedCount = managedEvents.filter((event) => event.published).length;
+  const liveCount = managedEvents.filter((e) => e.broadcastState === "live").length;
+  const publishedCount = managedEvents.filter((e) => e.published).length;
 
   const cards = managedEvents
     .map(
@@ -571,10 +612,10 @@ function creatorView() {
               <h4>${h(event.title)}</h4>
               ${statusBadge(event.broadcastState)}
             </div>
-            <p class="muted">${h(formatDateTime(event.startsAt))} | ${h(event.venue)}</p>
-            <div class="row">
-              <button class="btn primary" data-action="open-control-room" data-id="${h(event.id)}">Open Control Room</button>
-              <button class="btn" data-action="view-event" data-id="${h(event.id)}">View Fan Page</button>
+            <p class="card-meta">${h(formatDateTime(event.startsAt))} &middot; ${h(event.venue)}</p>
+            <div class="card-actions">
+              <button class="btn primary" data-action="open-control-room" data-id="${h(event.id)}">Control Room</button>
+              <button class="btn ghost" data-action="view-event" data-id="${h(event.id)}">Fan View</button>
             </div>
           </div>
         </article>
@@ -583,158 +624,169 @@ function creatorView() {
     .join("");
 
   return `
-    <section class="panel">
-      <h2>Creator Studio Dashboard</h2>
-      <p class="muted">Focused operations view for setup, rehearsal, and go-live.</p>
-      <div class="kpis">
-        <div class="kpi"><p class="label">Managed Events</p><p class="value">${managedEvents.length}</p></div>
-        <div class="kpi"><p class="label">Published</p><p class="value">${publishedCount}</p></div>
-        <div class="kpi"><p class="label">Live Now</p><p class="value">${liveCount}</p></div>
-      </div>
-    </section>
+    <div>
+      <h2 class="section-title">Creator Studio</h2>
+      <p class="section-subtitle">Manage your events and go live</p>
+    </div>
 
-    <section class="layout">
+    <div class="kpis">
+      <div class="kpi"><p class="label">Total Events</p><p class="value">${managedEvents.length}</p></div>
+      <div class="kpi"><p class="label">Published</p><p class="value">${publishedCount}</p></div>
+      <div class="kpi"><p class="label">Live Now</p><p class="value ${liveCount > 0 ? "live" : ""}">${liveCount}</p></div>
+    </div>
+
+    <section class="layout" style="margin-top:1.5rem;">
       <article class="panel">
         <h3>Create Event</h3>
-        <form id="createEventForm">
+        <form id="createEventForm" style="margin-top:0.75rem;">
           <div class="form-grid">
-            <label>Title<input name="title" value="Tour Stop Livestream" required /></label>
-            <label>Venue<input name="venue" value="Los Angeles, CA" required /></label>
-            <label class="span-2">Description<textarea name="description" required>High-energy live set for global fans.</textarea></label>
+            <label>Title<input name="title" placeholder="Tour Stop Livestream" required /></label>
+            <label>Venue<input name="venue" placeholder="Los Angeles, CA" required /></label>
+            <label class="span-2">Description<textarea name="description" placeholder="Describe your event..." required></textarea></label>
             <label>Start Time<input name="startsAt" type="datetime-local" value="${getLocalDateTimeInputValue()}" required /></label>
             <label>Duration (min)<input name="durationMin" type="number" value="90" min="30" required /></label>
             <label>Price USD<input name="priceUsd" type="number" value="19.99" step="0.01" min="0" required /></label>
             <label>Replay Hours<input name="replayHours" type="number" value="24" min="0" max="168" required /></label>
+            <label class="span-2">Image URL<input name="imageUrl" type="url" placeholder="https://example.com/image.jpg" /></label>
           </div>
-          <label><input name="published" type="checkbox" checked /> Publish immediately</label>
-          <div class="row" style="margin-top:0.45rem;">
+          <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;cursor:pointer;">
+            <input name="published" type="checkbox" checked style="width:auto;margin:0;" /> Publish immediately
+          </label>
+          <div class="row" style="margin-top:0.85rem;">
             <button class="btn primary" type="submit">Create Event</button>
           </div>
         </form>
       </article>
 
       <aside class="panel">
-        <h3>Managed Events</h3>
-        <p class="muted">Open control room to run state transitions.</p>
-        <div class="side-stack">
-          ${cards || `<p>No managed events visible yet.</p>`}
+        <h3>Your Events</h3>
+        <div class="side-stack" style="margin-top:0.75rem;">
+          ${cards || `<p class="muted">No events created yet.</p>`}
         </div>
       </aside>
     </section>
   `;
 }
 
+/* ── View: Control Room ── */
+
 function controlRoomView(eventId) {
   const event = getControlRoomEvent(eventId);
   if (!event) {
-    return `
-      <section class="panel">
-        <h2>Control Room</h2>
-        <p>Event not found. Open from Creator Studio.</p>
-      </section>
-    `;
+    return `<section class="panel" style="text-align:center;padding:3rem;"><h2>Control Room</h2><p class="muted">Event not found.</p></section>`;
   }
 
-  const broadcastState = event.broadcastState || "offline";
-  const canStartRehearsal = broadcastState === "offline";
-  const canGoLive = broadcastState === "ready";
-  const canEnd = broadcastState === "live";
+  const bs = event.broadcastState || "offline";
+  const canStartRehearsal = bs === "offline";
+  const canGoLive = bs === "ready";
+  const canEnd = bs === "live";
 
   return `
-    <section class="panel">
-      <div class="row" style="justify-content:space-between;">
-        <h2>Control Room: ${h(event.title)}</h2>
-        ${statusBadge(broadcastState)}
+    <div style="margin-bottom:1rem;">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <div>
+          <h2 class="section-title">${h(event.title)}</h2>
+          <p class="section-subtitle" style="margin-bottom:0;">Control Room &middot; ${h(event.venue)}</p>
+        </div>
+        ${statusBadge(bs)}
       </div>
-      <p class="muted">${h(formatDateTime(event.startsAt))} | ${h(event.venue)}</p>
-      <div class="stage-grid">
-        <div class="stage ${broadcastState === "offline" ? "active" : ""}"><strong>OFFLINE</strong><span>Event created, waiting for rehearsal.</span></div>
-        <div class="stage ${broadcastState === "ready" ? "active" : ""}"><strong>READY</strong><span>Rehearsal active and pre-live checks passing.</span></div>
-        <div class="stage ${broadcastState === "live" ? "active" : ""}"><strong>LIVE</strong><span>Public stream is on-air for entitled fans.</span></div>
-        <div class="stage ${broadcastState === "ended" ? "active" : ""}"><strong>ENDED</strong><span>Broadcast closed; replay depends on policy.</span></div>
-      </div>
-    </section>
+    </div>
 
-    <section class="layout">
+    <div class="stage-grid">
+      <div class="stage ${bs === "offline" ? "active" : ""}"><strong>Offline</strong><span>Waiting for setup</span></div>
+      <div class="stage ${bs === "ready" ? "active" : ""}"><strong>Ready</strong><span>Rehearsal active</span></div>
+      <div class="stage ${bs === "live" ? "active" : ""}"><strong>Live</strong><span>On-air for fans</span></div>
+      <div class="stage ${bs === "ended" ? "active" : ""}"><strong>Ended</strong><span>Broadcast closed</span></div>
+    </div>
+
+    <section class="layout" style="margin-top:1.25rem;">
       <article class="panel">
-        <h3>Ingest Setup</h3>
-        <label>Server URL<input value="${h(event.ingestUrl || "")}" readonly /></label>
-        <label>Stream Key<input value="${h(event.streamKey || "")}" readonly /></label>
-        <div class="row">
-          <button class="btn" data-action="copy-ingest" data-id="${h(event.id)}">Copy Server URL</button>
-          <button class="btn" data-action="copy-key" data-id="${h(event.id)}">Copy Stream Key</button>
+        <h3>Ingest Configuration</h3>
+        <div style="margin-top:0.75rem;">
+          <label>Server URL<input value="${h(event.ingestUrl || "Not yet assigned")}" readonly style="opacity:0.7;cursor:default;" /></label>
+          <label>Stream Key<input value="${h(event.streamKey || "Not yet assigned")}" readonly style="opacity:0.7;cursor:default;" type="password" /></label>
+        </div>
+        <div class="row" style="margin-top:0.5rem;">
+          <button class="btn" data-action="copy-ingest" data-id="${h(event.id)}">Copy URL</button>
+          <button class="btn" data-action="copy-key" data-id="${h(event.id)}">Copy Key</button>
         </div>
       </article>
 
       <aside class="panel">
         <h3>Broadcast Controls</h3>
-        <p class="muted">Policy-enforced transitions only.</p>
-        <div class="side-stack">
-          <button class="btn" data-action="control-start-rehearsal" data-id="${h(event.id)}" ${canStartRehearsal ? "" : "disabled"}>Start Rehearsal</button>
-          <button class="btn primary" data-action="control-go-live" data-id="${h(event.id)}" ${canGoLive ? "" : "disabled"}>Go Live</button>
-          <button class="btn warn" data-action="control-end" data-id="${h(event.id)}" ${canEnd ? "" : "disabled"}>End Stream</button>
-          <button class="btn ghost" data-action="go-creator">Back To Creator Studio</button>
+        <div class="side-stack" style="margin-top:0.75rem;gap:0.6rem;">
+          <button class="btn primary" data-action="control-start-rehearsal" data-id="${h(event.id)}" ${canStartRehearsal ? "" : "disabled"} style="width:100%;justify-content:center;">Start Rehearsal</button>
+          <button class="btn primary" data-action="control-go-live" data-id="${h(event.id)}" ${canGoLive ? "" : "disabled"} style="width:100%;justify-content:center;${canGoLive ? "background:var(--accent);border-color:var(--accent);box-shadow:var(--shadow-glow-accent);" : ""}">Go Live</button>
+          <button class="btn warn" data-action="control-end" data-id="${h(event.id)}" ${canEnd ? "" : "disabled"} style="width:100%;justify-content:center;">End Stream</button>
+          <hr style="border:none;border-top:1px solid var(--line);margin:0.25rem 0;" />
+          <button class="btn ghost" data-action="go-creator" style="width:100%;justify-content:center;">Back to Studio</button>
         </div>
       </aside>
     </section>
   `;
 }
+
+/* ── View: Account ── */
 
 function accountView() {
+  const isLoggedIn = Boolean(state.user);
+
   return `
-    <section class="layout">
-      <article class="panel">
-        <h2>Account</h2>
-        <p class="muted">Authenticate against API endpoints for role-specific experiences.</p>
-        <p>${
-          state.user
-            ? `Signed in as <strong>${h(state.user.displayName)}</strong> (${h(state.user.role)})`
-            : "Not signed in"
-        }</p>
+    <div style="max-width:720px;margin:0 auto;">
+      <h2 class="section-title" style="text-align:center;">Account</h2>
+      <p class="section-subtitle" style="text-align:center;">${
+        isLoggedIn
+          ? `Signed in as <strong style="color:var(--ink);">${h(state.user.displayName)}</strong> (${h(state.user.role)})`
+          : "Sign in or create an account to get started"
+      }</p>
 
-        <form id="apiBaseForm">
-          <label>API Base URL<input name="apiBase" value="${h(state.apiBase)}" required /></label>
-          <button class="btn" type="submit">Save API Base</button>
-        </form>
-
-        <div class="row" style="margin-top:1rem;">
-          <button class="btn" data-action="logout">Logout</button>
-          <button class="btn ghost" data-action="go-discover">Return To Discover</button>
-        </div>
-      </article>
-
-      <aside class="panel side-stack">
-        <div>
-          <h3>Sign Up</h3>
-          <form id="signupForm">
-            <label>Email<input name="email" type="email" required /></label>
-            <label>Password<input name="password" type="password" minlength="8" required /></label>
-            <label>Display Name<input name="displayName" required /></label>
-            <label>Role
-              <select name="role">
-                <option value="fan">fan</option>
-                <option value="creator">creator</option>
-                <option value="org_admin">org_admin</option>
-                <option value="support_admin">support_admin</option>
-              </select>
-            </label>
-            <label>Organization ID (optional)<input name="organizationId" /></label>
-            <button class="btn primary" type="submit">Create Account</button>
+      ${isLoggedIn ? `
+        <section class="panel" style="margin-bottom:1.25rem;">
+          <h3>Settings</h3>
+          <form id="apiBaseForm" style="margin-top:0.75rem;">
+            <label>API Base URL<input name="apiBase" value="${h(state.apiBase)}" required /></label>
+            <div class="row">
+              <button class="btn" type="submit">Save</button>
+              <button class="btn ghost" data-action="logout">Sign Out</button>
+            </div>
           </form>
-        </div>
+        </section>
+      ` : `
+        <section class="layout" style="grid-template-columns:1fr 1fr;">
+          <article class="panel">
+            <h3>Sign Up</h3>
+            <form id="signupForm" style="margin-top:0.75rem;">
+              <label>Email<input name="email" type="email" placeholder="you@example.com" required /></label>
+              <label>Password<input name="password" type="password" minlength="8" placeholder="Min 8 characters" required /></label>
+              <label>Display Name<input name="displayName" placeholder="Your name" required /></label>
+              <label>Role
+                <select name="role">
+                  <option value="fan">Fan</option>
+                  <option value="creator">Creator</option>
+                  <option value="org_admin">Org Admin</option>
+                  <option value="support_admin">Support Admin</option>
+                </select>
+              </label>
+              <label>Organization ID<input name="organizationId" placeholder="Optional" /></label>
+              <button class="btn primary" type="submit" style="width:100%;justify-content:center;margin-top:0.25rem;">Create Account</button>
+            </form>
+          </article>
 
-        <div>
-          <h3>Login</h3>
-          <form id="loginForm">
-            <label>Email<input name="email" type="email" required /></label>
-            <label>Password<input name="password" type="password" minlength="8" required /></label>
-            <button class="btn primary" type="submit">Login</button>
-          </form>
-        </div>
-      </aside>
-    </section>
+          <aside class="panel">
+            <h3>Login</h3>
+            <form id="loginForm" style="margin-top:0.75rem;">
+              <label>Email<input name="email" type="email" placeholder="you@example.com" required /></label>
+              <label>Password<input name="password" type="password" minlength="8" required /></label>
+              <button class="btn primary" type="submit" style="width:100%;justify-content:center;margin-top:0.25rem;">Sign In</button>
+            </form>
+          </aside>
+        </section>
+      `}
+    </div>
   `;
 }
+
+/* ── Routing & Rendering ── */
 
 function renderRouteContent() {
   if (state.route === "discover") return discoverView();
@@ -749,13 +801,11 @@ function renderRouteContent() {
 function appTemplate() {
   return `
     ${renderHero()}
-    <section class="top-grid">
-      ${fanJourneyPanel()}
-      ${creatorJourneyPanel()}
-    </section>
     ${renderRouteContent()}
   `;
 }
+
+/* ── Actions ── */
 
 async function onBuy(eventId) {
   if (!requireAuthRoute()) return;
@@ -842,6 +892,8 @@ function copyText(text, label) {
   render();
 }
 
+/* ── Event Handlers ── */
+
 function attachEventHandlers() {
   [...app.querySelectorAll("[data-action='go-discover']")].forEach((button) => {
     button.addEventListener("click", async () => {
@@ -870,6 +922,14 @@ function attachEventHandlers() {
   [...app.querySelectorAll("[data-action='view-event']")].forEach((button) => {
     button.addEventListener("click", async () => {
       await navigateTo("event", { eventId: button.dataset.id });
+    });
+  });
+
+  // Make entire cards clickable (skip if a button inside was clicked)
+  [...app.querySelectorAll("article.card[data-action='view-event']")].forEach((card) => {
+    card.addEventListener("click", async (e) => {
+      if (e.target.closest("button")) return;
+      await navigateTo("event", { eventId: card.dataset.id });
     });
   });
 
@@ -943,7 +1003,7 @@ function attachEventHandlers() {
   [...app.querySelectorAll("[data-action='logout']")].forEach((button) => {
     button.addEventListener("click", async () => {
       clearSession();
-      setNotice("Logged out.", "success");
+      setNotice("Signed out.", "success");
       await navigateTo("discover");
     });
   });
@@ -1046,6 +1106,8 @@ function attachEventHandlers() {
         replayHours: Number(formData.get("replayHours") || 24),
         published: Boolean(formData.get("published")),
       };
+      const imageUrl = String(formData.get("imageUrl") || "").trim();
+      if (imageUrl) body.imageUrl = imageUrl;
 
       setLoading(true);
       try {
@@ -1066,6 +1128,8 @@ function attachEventHandlers() {
 function render() {
   app.innerHTML = appTemplate();
   attachEventHandlers();
+  renderUserIndicator();
+  renderLoadingBar();
 }
 
 async function init() {
