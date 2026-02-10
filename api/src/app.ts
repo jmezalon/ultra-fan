@@ -441,6 +441,7 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       eventId: event.id,
       userId: sender.id,
       userDisplayName: sender.displayName,
+      userProfileImageUrl: sender.profileImageUrl,
       body: parsedBody.data.body,
     });
 

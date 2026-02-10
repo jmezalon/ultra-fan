@@ -12,7 +12,7 @@ import {
   refreshControlRoom,
   hydrateUser,
 } from "./state.js";
-import { h } from "./utils.js";
+import { h, renderAvatarMarkup } from "./utils.js";
 import { showToast, renderLoadingBar, setLoading, setNotice, setActiveNav } from "./ui.js";
 import { closeChatStream, loadChatHistory, ensureChatStream, updateWatchChatPanel } from "./chat.js";
 import { destroyPlayer, initHlsPlayer, getCameraStream, startCameraBroadcast, stopCameraBroadcast } from "./media.js";
@@ -74,14 +74,15 @@ function renderUserIndicator() {
   if (!el) return;
 
   if (state.user) {
-    const initials = (state.user.displayName || "U")
-      .split(" ")
-      .map((w) => w[0])
-      .join("")
-      .slice(0, 2);
+    const displayName = state.user.displayName || "User";
     el.innerHTML = `
-      <div class="user-avatar">${h(initials)}</div>
-      <span>${h(state.user.displayName)}</span>
+      ${renderAvatarMarkup({
+        displayName,
+        imageUrl: state.user.profileImageUrl,
+        className: "avatar avatar-sm user-avatar",
+        alt: `${displayName} profile picture`,
+      })}
+      <span>${h(displayName)}</span>
     `;
   } else {
     el.innerHTML = `<button class="btn ghost" style="padding:0.35rem 0.75rem;font-size:0.8rem;">Sign In</button>`;

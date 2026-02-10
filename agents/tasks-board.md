@@ -10,7 +10,7 @@ Status: In progress (backend foundation + realtime chat persistence added)
 
 ## Track 2: Design
 Owner: Design Agent
-Status: In progress (professional-grade client UX shell implemented; validation/polish pending)
+Status: In progress (professional-grade client UX shell implemented; avatar reliability + chat identity polish added; validation/polish pending)
 
 1. Produce creator control-room UX for pro setup.
 2. Produce fan states for entitlement, waiting room, live, replay ended.
@@ -55,3 +55,5 @@ Status: In progress
 - 2026-02-10: Added public artist profile support (`/artists/:artistUserId`) and creator-editable profile metadata, then integrated fan-facing host information on event pages plus a dedicated artist profile page.
 - 2026-02-10: Started CI/CD deployment track implementation with Heroku runtime wiring so one service can serve both API and the professional client UI from a shared production origin.
 - 2026-02-10: Added social metadata in the prototype client (`twitter:card` and Open Graph tags), shipped a branded Twitter card image, and set the Ultra Fan logo as favicon/app icon.
+- 2026-02-10: Fixed portrait rendering fallbacks across account/profile surfaces, added navbar avatar image support with initial fallback, and surfaced chat participant avatars next to names.
+- 2026-02-10: Handoff note (Design -> Architecture): Added optional chat payload enrichment (`userProfileImageUrl`) so chat UI can render participant avatars when available without relaxing authz/entitlement checks.

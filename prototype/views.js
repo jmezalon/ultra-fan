@@ -9,7 +9,14 @@ import {
   getArtistProfile,
   getArtistEvents,
 } from "./state.js";
-import { h, formatDateTime, formatMoney, getLocalDateTimeInputValue, statusBadge } from "./utils.js";
+import {
+  h,
+  formatDateTime,
+  formatMoney,
+  getLocalDateTimeInputValue,
+  statusBadge,
+  renderAvatarMarkup,
+} from "./utils.js";
 import { renderChatMessagesMarkup } from "./chat.js";
 import { getCameraStream } from "./media.js";
 
@@ -103,13 +110,12 @@ export function eventDetailView(eventId) {
       <aside class="panel">
         <h3>Hosted By</h3>
         <div style="display:flex;gap:0.75rem;align-items:center;margin-top:0.75rem;">
-          <div style="position:relative;width:56px;height:56px;border-radius:50%;overflow:hidden;background:var(--surface-3);display:grid;place-items:center;font-weight:700;color:var(--ink-secondary);">
-            ${
-              artistImage
-                ? `<img src="${h(artistImage)}" alt="${h(artistName)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;" />`
-                : h(artistName.slice(0, 1).toUpperCase())
-            }
-          </div>
+          ${renderAvatarMarkup({
+            displayName: artistName,
+            imageUrl: artistImage,
+            className: "avatar avatar-host",
+            alt: `${artistName} profile picture`,
+          })}
           <div>
             <p style="font-weight:700;color:var(--ink);">${h(artistName)}</p>
             <p class="muted" style="font-size:0.83rem;">${artist?.hometown ? h(artist.hometown) : "Global livestream artist"}</p>
@@ -484,13 +490,6 @@ export function accountView() {
 
   const canEditCreatorProfile = ["creator", "org_admin"].includes(state.user.role);
 
-  const initials = (state.user.displayName || "U")
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
   const roleLabels = { fan: "Fan", creator: "Creator", org_admin: "Org Admin", support_admin: "Support Admin" };
   const roleLabel = roleLabels[state.user.role] || state.user.role;
 
@@ -498,9 +497,12 @@ export function accountView() {
     <div style="max-width:720px;margin:0 auto;">
       <section class="panel" style="margin-bottom:1.25rem;">
         <div style="display:flex;align-items:center;gap:1rem;">
-          <div style="position:relative;width:64px;height:64px;border-radius:50%;background:var(--accent);overflow:hidden;display:grid;place-items:center;font-weight:700;font-size:1.25rem;color:#fff;flex-shrink:0;">
-            ${state.user.profileImageUrl ? `<img src="${h(state.user.profileImageUrl)}" alt="${h(state.user.displayName)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;" />` : h(initials)}
-          </div>
+          ${renderAvatarMarkup({
+            displayName: state.user.displayName || "User",
+            imageUrl: state.user.profileImageUrl,
+            className: "avatar avatar-xl",
+            alt: `${state.user.displayName || "User"} profile picture`,
+          })}
           <div style="min-width:0;">
             <h2 style="margin:0;font-size:1.25rem;color:var(--ink);">${h(state.user.displayName)}</h2>
             <p class="muted" style="margin:0.15rem 0 0;">${h(state.user.email || "")}</p>
@@ -523,7 +525,16 @@ export function accountView() {
           <label>Bio<textarea name="bio" placeholder="Tell fans your story and music style...">${h(state.user.bio || "")}</textarea></label>
           <label>Hometown<input name="hometown" value="${h(state.user.hometown || "")}" placeholder="City, Country" /></label>
           <label>Profile Image
-            ${state.user.profileImageUrl ? `<div style="margin:0.35rem 0;"><img src="${h(state.user.profileImageUrl)}" alt="Current profile image" style="width:64px;height:64px;object-fit:cover;border-radius:50%;border:2px solid var(--line);" /></div>` : ""}
+            ${
+              state.user.profileImageUrl
+                ? `<div style="margin:0.35rem 0;">${renderAvatarMarkup({
+                    displayName: state.user.displayName || "User",
+                    imageUrl: state.user.profileImageUrl,
+                    className: "avatar avatar-xl",
+                    alt: "Current profile image",
+                  })}</div>`
+                : ""
+            }
             <input name="profileImageFile" type="file" accept="image/jpeg,image/png,image/gif,image/webp" />
           </label>
           <label>Website URL<input name="websiteUrl" type="url" value="${h(state.user.websiteUrl || "")}" placeholder="https://..." /></label>

@@ -48,6 +48,7 @@ export interface ChatMessage {
   eventId: string;
   userId: string;
   userDisplayName: string;
+  userProfileImageUrl?: string | null;
   body: string;
   createdAt: string;
 }

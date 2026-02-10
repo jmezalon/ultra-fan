@@ -114,11 +114,13 @@ export class MemoryRepository implements Repository {
   }
 
   async createChatMessage(input: CreateChatMessageInput) {
+    const sender = users.find((u) => u.id === input.userId);
     const message: ChatMessage = {
       id: id("msg"),
       eventId: input.eventId,
       userId: input.userId,
       userDisplayName: input.userDisplayName,
+      userProfileImageUrl: input.userProfileImageUrl ?? sender?.profileImageUrl ?? null,
       body: input.body,
       createdAt: nowIso(),
     };
@@ -132,7 +134,14 @@ export class MemoryRepository implements Repository {
     return chatMessages
       .filter((m) => m.eventId === input.eventId && Date.parse(m.createdAt) >= sinceMs)
       .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
-      .slice(-limit);
+      .slice(-limit)
+      .map((message) => {
+        const sender = users.find((u) => u.id === message.userId);
+        return {
+          ...message,
+          userProfileImageUrl: sender?.profileImageUrl ?? message.userProfileImageUrl ?? null,
+        };
+      });
   }
 
   async deleteChatMessagesOlderThan(cutoffIso: string) {

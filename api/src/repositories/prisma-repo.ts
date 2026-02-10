@@ -84,6 +84,8 @@ function mapChatMessage(message: {
   eventId: string;
   userId: string;
   userDisplayName: string;
+  userProfileImageUrl?: string | null;
+  user?: { profileImageUrl: string | null } | null;
   body: string;
   createdAt: Date;
 }): ChatMessage {
@@ -92,6 +94,7 @@ function mapChatMessage(message: {
     eventId: message.eventId,
     userId: message.userId,
     userDisplayName: message.userDisplayName,
+    userProfileImageUrl: message.userProfileImageUrl ?? message.user?.profileImageUrl ?? null,
     body: message.body,
     createdAt: message.createdAt.toISOString(),
   };
@@ -240,6 +243,11 @@ export class PrismaRepository implements Repository {
         body: input.body,
         createdAt: new Date(nowIso()),
       },
+      include: {
+        user: {
+          select: { profileImageUrl: true },
+        },
+      },
     });
     return mapChatMessage(row);
   }
@@ -252,6 +260,11 @@ export class PrismaRepository implements Repository {
       },
       orderBy: { createdAt: "desc" },
       take: input.limit ?? 200,
+      include: {
+        user: {
+          select: { profileImageUrl: true },
+        },
+      },
     });
     return rows.reverse().map(mapChatMessage);
   }
