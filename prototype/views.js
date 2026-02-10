@@ -445,7 +445,7 @@ export function controlRoomView(eventId) {
             </div>
           </div>
           <div class="row" style="margin-top:0.75rem;">
-            <button class="btn primary" data-action="start-camera" data-key="${h(event.streamKey || "")}" ${cameraStream ? "disabled" : ""}>Start Camera</button>
+            <button class="btn primary" data-action="start-camera" ${cameraStream ? "disabled" : ""}>Start Camera</button>
             <button class="btn warn" data-action="stop-camera" ${cameraStream ? "" : "disabled"}>Stop Camera</button>
           </div>
         </div>
@@ -483,22 +483,32 @@ export function accountView() {
 
   const canEditCreatorProfile = ["creator", "org_admin"].includes(state.user.role);
 
+  const initials = (state.user.displayName || "U")
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  const roleLabels = { fan: "Fan", creator: "Creator", org_admin: "Org Admin", support_admin: "Support Admin" };
+  const roleLabel = roleLabels[state.user.role] || state.user.role;
+
   return `
     <div style="max-width:720px;margin:0 auto;">
-      <h2 class="section-title" style="text-align:center;">Account</h2>
-      <p class="section-subtitle" style="text-align:center;">
-        Signed in as <strong style="color:var(--ink);">${h(state.user.displayName)}</strong> (${h(state.user.role)})
-      </p>
-
       <section class="panel" style="margin-bottom:1.25rem;">
-        <h3>Settings</h3>
-        <form id="apiBaseForm" style="margin-top:0.75rem;">
-          <label>API Base URL<input name="apiBase" value="${h(state.apiBase)}" required /></label>
-          <div class="row">
-            <button class="btn" type="submit">Save</button>
-            <button class="btn ghost" data-action="logout">Sign Out</button>
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <div style="width:64px;height:64px;border-radius:50%;background:var(--accent);display:grid;place-items:center;font-weight:700;font-size:1.25rem;color:#fff;flex-shrink:0;">
+            ${state.user.profileImageUrl ? `<img src="${h(state.user.profileImageUrl)}" alt="${h(state.user.displayName)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />` : h(initials)}
           </div>
-        </form>
+          <div style="min-width:0;">
+            <h2 style="margin:0;font-size:1.25rem;color:var(--ink);">${h(state.user.displayName)}</h2>
+            <p class="muted" style="margin:0.15rem 0 0;">${h(state.user.email || "")}</p>
+            <span style="display:inline-block;margin-top:0.35rem;padding:0.15rem 0.55rem;border-radius:999px;font-size:0.75rem;font-weight:600;background:var(--surface-3);color:var(--ink-secondary);">${h(roleLabel)}</span>
+          </div>
+        </div>
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--line);">
+          <button class="btn ghost" data-action="logout" style="width:100%;justify-content:center;">Sign Out</button>
+        </div>
       </section>
 
       ${

@@ -124,6 +124,7 @@ export function getControlRoomEvent(eventId) {
     title: controlRoom.title || event.title,
     ingestUrl: controlRoom.ingestUrl || event.ingestUrl,
     streamKey: controlRoom.streamKey || event.streamKey,
+    whipUrl: controlRoom.whipUrl || event.whipUrl,
     broadcastState: controlRoom.broadcastState || event.broadcastState,
     rehearsalActive: Boolean(controlRoom.rehearsalActive),
   };
@@ -148,6 +149,7 @@ export function mergeControlRoom(data) {
     title: data.title || current?.title || "Untitled event",
     ingestUrl: data.ingestUrl || current?.ingestUrl || "",
     streamKey: data.streamKey || current?.streamKey || "",
+    whipUrl: data.whipUrl || current?.whipUrl || "",
     broadcastState: data.broadcastState || current?.broadcastState || "offline",
     rehearsalActive: Boolean(data.rehearsalActive),
   });

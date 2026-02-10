@@ -220,9 +220,6 @@ async function onCheckAccess(eventId) {
   try {
     await ensureEvent(eventId);
     const data = await apiRequest(`/events/${eventId}/access-token`);
-    if (!data.hlsUrl && data.streamPath) {
-      data.hlsUrl = `http://localhost:8888${data.streamPath}`;
-    }
     state.streamInfoByEvent[eventId] = data;
     setNotice("Playback token issued.", "success");
     await navigateTo("watch", { eventId });
@@ -343,12 +340,13 @@ function attachEventHandlers() {
   });
 
   bindAction("start-camera", async function () {
-    const key = this.dataset.key;
-    if (!key) {
+    const event = getControlRoomEvent(state.routeEventId);
+    const whipUrl = event?.whipUrl;
+    if (!whipUrl) {
       showToast("Stream key not available yet.", "error");
       return;
     }
-    await startCameraBroadcast(key);
+    await startCameraBroadcast(whipUrl);
   });
 
   bindAction("stop-camera", () => {
@@ -390,29 +388,6 @@ function attachEventHandlers() {
     setNotice("Signed out.", "success");
     await navigateTo("discover");
   });
-
-  const apiBaseForm = document.getElementById("apiBaseForm");
-  if (apiBaseForm) {
-    apiBaseForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const formData = new FormData(apiBaseForm);
-      state.apiBase = String(formData.get("apiBase") || "").trim();
-      localStorage.setItem("ultra_fan_api_base", state.apiBase);
-      closeChatStream();
-
-      setLoading(true);
-      try {
-        await refreshEvents();
-        await refreshLibrary();
-        setNotice("API base updated.", "success");
-      } catch (err) {
-        setNotice(err.message, "error");
-      } finally {
-        setLoading(false);
-        render();
-      }
-    });
-  }
 
   const signupForm = document.getElementById("signupForm");
   if (signupForm) {

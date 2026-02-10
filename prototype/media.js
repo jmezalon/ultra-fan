@@ -93,7 +93,7 @@ export function initHlsPlayer(hlsUrl) {
   });
 }
 
-export async function startCameraBroadcast(streamKey) {
+export async function startCameraBroadcast(whipUrl) {
   try {
     cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
   } catch {
@@ -130,7 +130,6 @@ export async function startCameraBroadcast(streamKey) {
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
-  const whipUrl = `http://localhost:8889/live/${encodeURIComponent(streamKey)}/whip`;
   let response;
   try {
     response = await fetch(whipUrl, {

@@ -481,11 +481,14 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       return;
     }
 
+    const whipBaseUrl = process.env.WHIP_BASE_URL ?? "http://localhost:8889";
+
     res.json({
       eventId: event.id,
       title: event.title,
       ingestUrl: event.ingestUrl,
       streamKey: event.streamKey,
+      whipUrl: `${whipBaseUrl}/live/${event.streamKey}/whip`,
       broadcastState: event.broadcastState,
       rehearsalActive: event.rehearsalActive,
     });
