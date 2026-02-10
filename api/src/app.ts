@@ -2,6 +2,8 @@ import bcrypt from "bcryptjs";
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
 import fs from "node:fs";
+import https from "node:https";
+import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import multer from "multer";
@@ -582,16 +584,43 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       const upstreamWhipUrl = buildWhipUpstreamUrl(whipBaseUrl, event.streamKey);
 
       const sdpBuffer = Buffer.from(offerSdp, "utf-8");
-      let upstreamResponse: globalThis.Response;
+      const url = new URL(upstreamWhipUrl);
+      const transport = url.protocol === "https:" ? https : http;
+
+      let upstreamStatus: number;
+      let upstreamHeaders: http.IncomingHttpHeaders;
+      let upstreamBody: string;
       try {
-        upstreamResponse = await fetch(upstreamWhipUrl, {
-          method: "POST",
-          headers: {
-            "content-type": "application/sdp",
-            "content-length": String(sdpBuffer.byteLength),
-          },
-          body: sdpBuffer,
-        });
+        ({ status: upstreamStatus, headers: upstreamHeaders, body: upstreamBody } = await new Promise<{
+          status: number;
+          headers: http.IncomingHttpHeaders;
+          body: string;
+        }>((resolve, reject) => {
+          const proxyReq = transport.request(
+            url,
+            {
+              method: "POST",
+              headers: {
+                "content-type": "application/sdp",
+                "content-length": sdpBuffer.byteLength,
+              },
+            },
+            (proxyRes) => {
+              const chunks: Buffer[] = [];
+              proxyRes.on("data", (c) => chunks.push(c));
+              proxyRes.on("end", () =>
+                resolve({
+                  status: proxyRes.statusCode ?? 500,
+                  headers: proxyRes.headers,
+                  body: Buffer.concat(chunks).toString("utf-8"),
+                }),
+              );
+              proxyRes.on("error", reject);
+            },
+          );
+          proxyReq.on("error", reject);
+          proxyReq.end(sdpBuffer);
+        }));
       } catch {
         res.status(502).json({
           error: "WHIP upstream unreachable. Verify WHIP_BASE_URL and MediaMTX network access.",
@@ -599,20 +628,18 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
         return;
       }
 
-      const upstreamBody = await upstreamResponse.text();
-      if (!upstreamResponse.ok) {
+      if (upstreamStatus < 200 || upstreamStatus >= 300) {
         const summary = upstreamBody.trim();
-        res.status(upstreamResponse.status).json({
-          error: summary || `WHIP upstream failed (${upstreamResponse.status}).`,
+        res.status(upstreamStatus).json({
+          error: summary || `WHIP upstream failed (${upstreamStatus}).`,
         });
         return;
       }
 
-      const location = upstreamResponse.headers.get("location");
-      if (location) {
-        res.setHeader("Location", location);
+      if (upstreamHeaders.location) {
+        res.setHeader("Location", upstreamHeaders.location);
       }
-      res.type("application/sdp").status(upstreamResponse.status).send(upstreamBody);
+      res.type("application/sdp").status(upstreamStatus).send(upstreamBody);
     }),
   );
 
