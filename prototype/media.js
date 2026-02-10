@@ -93,7 +93,7 @@ export function initHlsPlayer(hlsUrl) {
   });
 }
 
-export async function startCameraBroadcast(whipUrl) {
+export async function startCameraBroadcast(whipUrl, accessToken = "") {
   try {
     cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
   } catch {
@@ -132,9 +132,13 @@ export async function startCameraBroadcast(whipUrl) {
 
   let response;
   try {
+    const headers = { "Content-Type": "application/sdp" };
+    if (accessToken) {
+      headers.authorization = `Bearer ${accessToken}`;
+    }
     response = await fetch(whipUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/sdp" },
+      headers,
       body: pc.localDescription.sdp,
     });
   } catch {
@@ -144,7 +148,22 @@ export async function startCameraBroadcast(whipUrl) {
   }
 
   if (!response.ok) {
-    showToast(`WHIP failed (${response.status}).`, "error");
+    let detail = "";
+    try {
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        const payload = await response.json();
+        detail = typeof payload?.error === "string" ? payload.error : "";
+      } else {
+        detail = (await response.text()).trim();
+      }
+    } catch {
+      detail = "";
+    }
+    showToast(
+      detail ? `WHIP failed (${response.status}): ${detail}` : `WHIP failed (${response.status}).`,
+      "error",
+    );
     stopCameraBroadcast();
     return;
   }

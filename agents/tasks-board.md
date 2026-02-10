@@ -2,7 +2,7 @@
 
 ## Track 1: Architecture
 Owner: Architect Agent
-Status: In progress (backend foundation + realtime chat persistence added; creator image upload payload/legacy path reliability hardened)
+Status: In progress (backend foundation + realtime chat persistence added; creator image upload reliability hardened; camera ingest WHIP proxy path added)
 
 1. Define auth/authz model with role + ownership policy matrix.
 2. Define event/broadcast/ticket/entitlement schema.
@@ -58,3 +58,4 @@ Status: In progress
 - 2026-02-10: Fixed portrait rendering fallbacks across account/profile surfaces, added navbar avatar image support with initial fallback, and surfaced chat participant avatars next to names.
 - 2026-02-10: Handoff note (Design -> Architecture): Added optional chat payload enrichment (`userProfileImageUrl`) so chat UI can render participant avatars when available without relaxing authz/entitlement checks.
 - 2026-02-10: Fixed creator profile image upload reliability by increasing JSON payload limit for base64 image submissions, returning HTTP 413 for oversized payloads, and restoring `/uploads/*` compatibility in image validation + static serving for legacy stored paths.
+- 2026-02-10: Fixed control-room camera start failures by proxying WHIP ingest through an authz-checked API endpoint (`/events/:eventId/whip`), returning same-origin `whipUrl` from control-room payload, and surfacing upstream WHIP errors in client toasts for faster operator diagnosis.

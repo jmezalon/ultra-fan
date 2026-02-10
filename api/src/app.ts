@@ -67,6 +67,8 @@ const updateCreatorProfileSchema = z.object({
 const CHAT_RETENTION_HOURS = 24;
 const CHAT_KEEPALIVE_MS = 15_000;
 const JSON_BODY_LIMIT = "8mb";
+const SDP_BODY_LIMIT = "1mb";
+const DEFAULT_WHIP_BASE_URL = "http://localhost:8889";
 
 const CREATOR_PROFILE_ROLES: Role[] = ["creator", "org_admin"];
 
@@ -82,8 +84,21 @@ export function isPayloadTooLargeError(err: unknown) {
   return payloadError?.type === "entity.too.large" || payloadError?.status === 413;
 }
 
+export function getRequestBaseUrl(req: Request) {
+  const forwardedProto = req.header("x-forwarded-proto")?.split(",")[0]?.trim();
+  const forwardedHost = req.header("x-forwarded-host")?.split(",")[0]?.trim();
+  const protocol = forwardedProto || req.protocol;
+  const host = forwardedHost || req.get("host") || "localhost";
+  return `${protocol}://${host}`;
+}
+
+export function buildWhipUpstreamUrl(whipBaseUrl: string, streamKey: string) {
+  return `${whipBaseUrl.replace(/\/+$/, "")}/live/${streamKey}/whip`;
+}
+
 export function buildApp(repo: Repository = new MemoryRepository()) {
   const app = express();
+  app.set("trust proxy", true);
   app.use(cors());
   app.use(express.json({ limit: JSON_BODY_LIMIT }));
   const chatStreams = new Map<string, Set<Response>>();
@@ -528,18 +543,74 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       return;
     }
 
-    const whipBaseUrl = process.env.WHIP_BASE_URL ?? "http://localhost:8889";
+    const requestBaseUrl = getRequestBaseUrl(req);
 
     res.json({
       eventId: event.id,
       title: event.title,
       ingestUrl: event.ingestUrl,
       streamKey: event.streamKey,
-      whipUrl: `${whipBaseUrl}/live/${event.streamKey}/whip`,
+      whipUrl: `${requestBaseUrl}/events/${event.id}/whip`,
       broadcastState: event.broadcastState,
       rehearsalActive: event.rehearsalActive,
     });
   }));
+
+  app.post(
+    "/events/:eventId/whip",
+    requireAuth,
+    requireRole("creator", "org_admin", "support_admin"),
+    express.text({ type: ["application/sdp", "text/plain"], limit: SDP_BODY_LIMIT }),
+    asyncHandler(async (req: AuthedRequest, res) => {
+      const event = await repo.findEventById(String(req.params.eventId));
+      if (!event) {
+        res.status(404).json({ error: "Event not found" });
+        return;
+      }
+      if (!canManageEvent(req.auth, event)) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+
+      const offerSdp = typeof req.body === "string" ? req.body.trim() : "";
+      if (!offerSdp) {
+        res.status(400).json({ error: "Missing SDP offer body." });
+        return;
+      }
+
+      const whipBaseUrl = process.env.WHIP_BASE_URL ?? DEFAULT_WHIP_BASE_URL;
+      const upstreamWhipUrl = buildWhipUpstreamUrl(whipBaseUrl, event.streamKey);
+
+      let upstreamResponse: globalThis.Response;
+      try {
+        upstreamResponse = await fetch(upstreamWhipUrl, {
+          method: "POST",
+          headers: { "content-type": "application/sdp" },
+          body: offerSdp,
+        });
+      } catch {
+        res.status(502).json({
+          error: "WHIP upstream unreachable. Verify WHIP_BASE_URL and MediaMTX network access.",
+        });
+        return;
+      }
+
+      const upstreamBody = await upstreamResponse.text();
+      if (!upstreamResponse.ok) {
+        const summary = upstreamBody.trim();
+        res.status(upstreamResponse.status).json({
+          error: summary || `WHIP upstream failed (${upstreamResponse.status}).`,
+        });
+        return;
+      }
+
+      const location = upstreamResponse.headers.get("location");
+      if (location) {
+        res.setHeader("Location", location);
+      }
+      res.type("application/sdp").status(upstreamResponse.status).send(upstreamBody);
+    }),
+  );
 
   app.post("/events/:eventId/broadcast/rehearsal/start", requireAuth, requireRole("creator", "org_admin", "support_admin"), asyncHandler(async (req: AuthedRequest, res) => {
     const event = await repo.findEventById(String(req.params.eventId));
