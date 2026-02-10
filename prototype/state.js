@@ -1,9 +1,22 @@
 export const CREATOR_ROLES = new Set(["creator", "org_admin", "support_admin"]);
 
+const defaultApiBase = (() => {
+  const saved = localStorage.getItem("ultra_fan_api_base");
+  if (saved) return saved;
+
+  const isLocalHost =
+    window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  if (isLocalHost && window.location.port === "4173") {
+    return `${window.location.protocol}//${window.location.hostname}:4000`;
+  }
+
+  return window.location.origin;
+})();
+
 export const state = {
   route: "discover",
   routeEventId: null,
-  apiBase: localStorage.getItem("ultra_fan_api_base") || "http://localhost:4000",
+  apiBase: defaultApiBase,
   token: localStorage.getItem("ultra_fan_token") || "",
   user: null,
   events: [],

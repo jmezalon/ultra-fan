@@ -1,0 +1,13 @@
+{
+  "name": "ultra-fan",
+  "private": true,
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "build": "npm --prefix api run build",
+    "start": "node api/dist/server.js",
+    "test": "npm --prefix api test",
+    "heroku-postbuild": "npm --prefix api ci && npm --prefix api run prisma:generate && npm --prefix api run build"
+  }
+}

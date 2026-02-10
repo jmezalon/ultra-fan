@@ -26,7 +26,7 @@ Status: Pending
 
 ## Track 4: CI/CD
 Owner: CI/CD Agent
-Status: Pending
+Status: In progress (Heroku release wiring in progress)
 
 1. Implement baseline CI workflow gates.
 2. Define staged deployment strategy.
@@ -53,3 +53,4 @@ Status: In progress
 - 2026-02-09: Replaced prototype UI shell with professional, flow-led client experience featuring explicit fan/creator journeys, stateful control-room timeline, responsive layout, and API-backed operational messaging.
 - 2026-02-09: Added entitlement/ownership-gated event chat backend with realtime SSE fan-out and persistent message storage (`ChatMessage`) retained for a minimum 24-hour replay window.
 - 2026-02-10: Added public artist profile support (`/artists/:artistUserId`) and creator-editable profile metadata, then integrated fan-facing host information on event pages plus a dedicated artist profile page.
+- 2026-02-10: Started CI/CD deployment track implementation with Heroku runtime wiring so one service can serve both API and the professional client UI from a shared production origin.

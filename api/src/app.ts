@@ -1,6 +1,9 @@
 import bcrypt from "bcryptjs";
 import cors from "cors";
 import express, { Request, Response } from "express";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { signAccessToken, signPlaybackToken, verifyAccessToken } from "./auth.js";
 import { AuthedRequest, requireAuth, requireRole } from "./middleware.js";
@@ -64,6 +67,9 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
   app.use(cors());
   app.use(express.json());
   const chatStreams = new Map<string, Set<Response>>();
+  const sourceDir = path.dirname(fileURLToPath(import.meta.url));
+  const clientDir = path.resolve(sourceDir, "../../prototype");
+  const clientIndexPath = path.join(clientDir, "index.html");
 
   const chatCutoffIso = () =>
     new Date(Date.now() - CHAT_RETENTION_HOURS * 60 * 60 * 1000).toISOString();
@@ -580,6 +586,13 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       expiresInSec: 300,
     });
   });
+
+  if (fs.existsSync(clientIndexPath)) {
+    app.use(express.static(clientDir));
+    app.get("/", (_req, res) => {
+      res.sendFile(clientIndexPath);
+    });
+  }
 
   return app;
 }
