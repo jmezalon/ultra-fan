@@ -29,7 +29,7 @@ const loginSchema = z.object({
 
 const imageUrlSchema = z.union([
   z.string().url(),
-  z.string().startsWith("/uploads/"),
+  z.string().startsWith("data:image/"),
 ]);
 
 const createEventSchema = z.object({
@@ -77,21 +77,8 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
   const clientDir = path.resolve(sourceDir, "../../prototype");
   const clientIndexPath = path.join(clientDir, "index.html");
 
-  const uploadsDir = path.resolve(sourceDir, "../../uploads");
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-  }
-  app.use("/uploads", express.static(uploadsDir));
-
   const upload = multer({
-    storage: multer.diskStorage({
-      destination: (_req, _file, cb) => cb(null, uploadsDir),
-      filename: (_req, file, cb) => {
-        const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-        const ext = path.extname(file.originalname);
-        cb(null, `${unique}${ext}`);
-      },
-    }),
+    storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
       const allowed = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -188,7 +175,8 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       res.status(400).json({ error: "No valid image file provided. Accepted types: JPEG, PNG, GIF, WebP." });
       return;
     }
-    const url = `/uploads/${req.file.filename}`;
+    const base64 = req.file.buffer.toString("base64");
+    const url = `data:${req.file.mimetype};base64,${base64}`;
     res.status(201).json({ url });
   });
 
