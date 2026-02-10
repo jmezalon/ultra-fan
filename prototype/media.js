@@ -115,13 +115,15 @@ export async function startCameraBroadcast(whipUrl, accessToken = "") {
     pc.addTrack(track, cameraStream);
   }
 
-  // Prefer H264 over VP8/VP9 so MediaMTX can convert to HLS
+  // Prefer H264 and exclude H265/HEVC (browsers often can't encode it)
   for (const transceiver of pc.getTransceivers()) {
     if (transceiver.sender.track?.kind === "video") {
       const caps = RTCRtpSender.getCapabilities?.("video");
       if (caps) {
         const h264 = caps.codecs.filter((c) => c.mimeType === "video/H264");
-        const rest = caps.codecs.filter((c) => c.mimeType !== "video/H264");
+        const rest = caps.codecs.filter(
+          (c) => c.mimeType !== "video/H264" && c.mimeType !== "video/H265" && c.mimeType !== "video/HEVC",
+        );
         if (h264.length) transceiver.setCodecPreferences([...h264, ...rest]);
       }
     }

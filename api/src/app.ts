@@ -98,6 +98,52 @@ export function buildWhipUpstreamUrl(whipBaseUrl: string, streamKey: string) {
   return `${whipBaseUrl.replace(/\/+$/, "")}/live/${streamKey}/whip`;
 }
 
+/**
+ * Strip H265/HEVC codec lines from an SDP offer.
+ * Many browsers advertise H265 decode support but cannot encode it,
+ * causing MediaMTX to negotiate H265 and then receive no video packets.
+ */
+export function stripH265FromSdp(sdp: string): string {
+  const lines = sdp.split(/\r?\n/);
+
+  // Collect H265/HEVC payload types
+  const h265Pts = new Set<string>();
+  for (const line of lines) {
+    const m = line.match(/^a=rtpmap:(\d+)\s+(?:H265|HEVC)\//i);
+    if (m) h265Pts.add(m[1]);
+  }
+  if (h265Pts.size === 0) return sdp;
+
+  // Collect associated rtx payload types
+  const rtxPts = new Set<string>();
+  for (const line of lines) {
+    const m = line.match(/^a=fmtp:(\d+)\s+apt=(\d+)/);
+    if (m && h265Pts.has(m[2])) rtxPts.add(m[1]);
+  }
+
+  const removePts = new Set([...h265Pts, ...rtxPts]);
+
+  const result: string[] = [];
+  for (const line of lines) {
+    // Drop rtpmap / fmtp / rtcp-fb lines for removed payload types
+    const ptMatch = line.match(/^a=(?:rtpmap|fmtp|rtcp-fb):(\d+)\b/);
+    if (ptMatch && removePts.has(ptMatch[1])) continue;
+
+    // Strip removed PTs from m=video line
+    if (line.startsWith("m=video")) {
+      const parts = line.split(/\s+/);
+      // parts: m=video <port> <proto> <pt1> <pt2> ...
+      const filtered = parts.filter((p, i) => i < 3 || !removePts.has(p));
+      result.push(filtered.join(" "));
+      continue;
+    }
+
+    result.push(line);
+  }
+
+  return result.join("\r\n");
+}
+
 
 export function buildApp(repo: Repository = new MemoryRepository()) {
   const app = express();
@@ -584,8 +630,10 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       const whipBaseUrl = process.env.WHIP_BASE_URL ?? DEFAULT_WHIP_BASE_URL;
       const upstreamWhipUrl = buildWhipUpstreamUrl(whipBaseUrl, event.streamKey);
 
+      // Strip H265/HEVC — browsers advertise it but often can't encode it.
+      const cleanedSdp = stripH265FromSdp(offerSdp);
       // pion/webrtc requires a trailing CRLF; .trim() above strips it.
-      const sdpBuffer = Buffer.from(offerSdp + "\r\n", "utf-8");
+      const sdpBuffer = Buffer.from(cleanedSdp + "\r\n", "utf-8");
       const url = new URL(upstreamWhipUrl);
       const transport = url.protocol === "https:" ? https : http;
 
