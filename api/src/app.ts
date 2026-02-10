@@ -575,6 +575,7 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       }
 
       const offerSdp = typeof req.body === "string" ? req.body.trim() : "";
+      console.log("[WHIP DEBUG] req.body type:", typeof req.body, "length:", typeof req.body === "string" ? req.body.length : "N/A");
       if (!offerSdp) {
         res.status(400).json({ error: "Missing SDP offer body." });
         return;
@@ -582,6 +583,7 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
 
       const whipBaseUrl = process.env.WHIP_BASE_URL ?? DEFAULT_WHIP_BASE_URL;
       const upstreamWhipUrl = buildWhipUpstreamUrl(whipBaseUrl, event.streamKey);
+      console.log("[WHIP DEBUG] upstream URL:", upstreamWhipUrl);
 
       const sdpBuffer = Buffer.from(offerSdp, "utf-8");
       const url = new URL(upstreamWhipUrl);
@@ -628,6 +630,7 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
         return;
       }
 
+      console.log("[WHIP DEBUG] upstream status:", upstreamStatus, "body length:", upstreamBody.length, "body preview:", upstreamBody.slice(0, 200));
       if (upstreamStatus < 200 || upstreamStatus >= 300) {
         const summary = upstreamBody.trim();
         res.status(upstreamStatus).json({
