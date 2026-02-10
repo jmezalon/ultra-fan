@@ -148,14 +148,14 @@ export class PrismaRepository implements Repository {
   }
 
   async listPublishedEvents() {
-    const rows = await prisma.event.findMany({ where: { published: true }, orderBy: { startsAt: "asc" } });
+    const rows = await prisma.event.findMany({ where: { published: true }, orderBy: { startsAt: "desc" } });
     return rows.map(mapEvent);
   }
 
   async listPublishedEventsByArtist(artistUserId: string) {
     const rows = await prisma.event.findMany({
       where: { published: true, artistUserId },
-      orderBy: { startsAt: "asc" },
+      orderBy: { startsAt: "desc" },
     });
     return rows.map(mapEvent);
   }
