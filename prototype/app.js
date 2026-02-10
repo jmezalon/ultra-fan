@@ -42,10 +42,42 @@ navButtons.forEach((btn) => {
   });
 });
 
+/* ── Watch Polling ── */
+
+let watchPollInterval = null;
+
+function startWatchPolling(eventId) {
+  if (watchPollInterval) return;
+  watchPollInterval = setInterval(async () => {
+    try {
+      await refreshEvent(eventId);
+      const event = getEvent(eventId);
+      if (!event || event.broadcastState !== "live") {
+        stopWatchPolling();
+        const msg = event?.broadcastState === "ended"
+          ? "The broadcast has ended."
+          : "The broadcast is no longer live.";
+        setNotice(msg, "info");
+        render();
+      }
+    } catch {
+      // Ignore transient polling errors.
+    }
+  }, 5000);
+}
+
+function stopWatchPolling() {
+  if (watchPollInterval) {
+    clearInterval(watchPollInterval);
+    watchPollInterval = null;
+  }
+}
+
 /* ── Session ── */
 
 function clearSession() {
   closeChatStream();
+  stopWatchPolling();
   state.token = "";
   state.user = null;
   state.libraryEvents = [];
@@ -108,6 +140,7 @@ async function navigateTo(route, options = {}) {
     (resolvedRoute !== "watch" || targetEventId !== state.routeEventId);
   if (leavingWatch) {
     closeChatStream();
+    stopWatchPolling();
   }
 
   const leavingControl =
@@ -558,6 +591,9 @@ function render() {
     const event = getEvent(state.routeEventId);
     if (streamInfo?.hlsUrl && event?.broadcastState === "live") {
       initHlsPlayer(streamInfo.hlsUrl);
+      startWatchPolling(state.routeEventId);
+    } else {
+      stopWatchPolling();
     }
 
     if (state.token) {
@@ -570,6 +606,7 @@ function render() {
     }
   } else {
     closeChatStream();
+    stopWatchPolling();
   }
 }
 

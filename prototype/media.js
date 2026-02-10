@@ -137,11 +137,14 @@ export function initHlsPlayer(hlsUrl) {
   });
 
   activeHlsPlayer = hls;
+  let networkRetries = 0;
+  const MAX_NETWORK_RETRIES = 8;
 
   hls.loadSource(hlsUrl);
   hls.attachMedia(video);
 
   hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    networkRetries = 0;
     if (overlay) overlay.style.display = "none";
     video.play().catch(() => {});
   });
@@ -150,6 +153,18 @@ export function initHlsPlayer(hlsUrl) {
     if (data.fatal) {
       switch (data.type) {
         case Hls.ErrorTypes.NETWORK_ERROR:
+          networkRetries++;
+          if (networkRetries > MAX_NETWORK_RETRIES) {
+            activeHlsPlayer = null;
+            hls.destroy();
+            detachWakeLock();
+            if (overlay) {
+              overlay.style.display = "";
+              overlay.querySelector(".player-status").textContent =
+                "Broadcast has stopped.";
+            }
+            return;
+          }
           if (overlay) {
             overlay.style.display = "";
             overlay.querySelector(".player-status").textContent =
