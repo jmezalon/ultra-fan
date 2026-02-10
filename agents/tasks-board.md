@@ -10,7 +10,7 @@ Status: In progress (backend foundation + realtime chat persistence added; creat
 
 ## Track 2: Design
 Owner: Design Agent
-Status: In progress (professional-grade client UX shell implemented; avatar reliability + chat identity polish added; validation/polish pending)
+Status: In progress (professional-grade client UX shell implemented; avatar reliability + chat identity polish added; fan live-player wake-lock hardening added; validation/polish pending)
 
 1. Produce creator control-room UX for pro setup.
 2. Produce fan states for entitlement, waiting room, live, replay ended.
@@ -59,3 +59,4 @@ Status: In progress
 - 2026-02-10: Handoff note (Design -> Architecture): Added optional chat payload enrichment (`userProfileImageUrl`) so chat UI can render participant avatars when available without relaxing authz/entitlement checks.
 - 2026-02-10: Fixed creator profile image upload reliability by increasing JSON payload limit for base64 image submissions, returning HTTP 413 for oversized payloads, and restoring `/uploads/*` compatibility in image validation + static serving for legacy stored paths.
 - 2026-02-10: Fixed control-room camera start failures by proxying WHIP ingest through an authz-checked API endpoint (`/events/:eventId/whip`), returning same-origin `whipUrl` from control-room payload, and surfacing upstream WHIP errors in client toasts for faster operator diagnosis.
+- 2026-02-10: Added fan watch-player wake-lock handling so supported browsers request `screen` wake lock while live video is playing and release it on pause/end/rerender/visibility changes to reduce unintended device sleep during active streams.
