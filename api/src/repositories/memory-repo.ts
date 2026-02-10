@@ -49,13 +49,13 @@ export class MemoryRepository implements Repository {
   }
 
   async listPublishedEvents() {
-    return events.filter((e) => e.published);
+    return events.filter((e) => e.published).sort((a, b) => Date.parse(b.startsAt) - Date.parse(a.startsAt));
   }
 
   async listPublishedEventsByArtist(artistUserId: string) {
     return events
       .filter((e) => e.published && e.artistUserId === artistUserId)
-      .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+      .sort((a, b) => Date.parse(b.startsAt) - Date.parse(a.startsAt));
   }
 
   async findEventById(eventId: string) {
