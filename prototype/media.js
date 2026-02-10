@@ -135,9 +135,18 @@ export function initHlsPlayer(hlsUrl, { onStreamStopped } = {}) {
         return;
       }
       if (overlay) {
+        overlay.style.display = "";
         overlay.querySelector(".player-status").textContent =
-          "Stream unavailable. The creator may not be broadcasting yet.";
+          "Stream not found. Waiting for broadcast...";
       }
+      // Retry after 3s — the HLS muxer may restart after transient errors
+      setTimeout(() => {
+        if (video.isConnected) {
+          video.src = "";
+          video.src = hlsUrl;
+          video.load();
+        }
+      }, 3000);
     });
     return;
   }
