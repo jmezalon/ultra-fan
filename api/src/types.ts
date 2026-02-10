@@ -9,6 +9,10 @@ export interface User {
   role: Role;
   displayName: string;
   organizationId: string | null;
+  bio: string | null;
+  hometown: string | null;
+  profileImageUrl: string | null;
+  websiteUrl: string | null;
   createdAt: string;
 }
 
@@ -46,4 +50,13 @@ export interface ChatMessage {
   userDisplayName: string;
   body: string;
   createdAt: string;
+}
+
+export interface CreatorProfile {
+  userId: string;
+  displayName: string;
+  bio: string | null;
+  hometown: string | null;
+  profileImageUrl: string | null;
+  websiteUrl: string | null;
 }

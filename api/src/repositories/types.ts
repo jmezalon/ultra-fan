@@ -8,6 +8,14 @@ export interface CreateUserInput {
   organizationId: string | null;
 }
 
+export interface UpdateUserProfileInput {
+  displayName?: string;
+  bio?: string | null;
+  hometown?: string | null;
+  profileImageUrl?: string | null;
+  websiteUrl?: string | null;
+}
+
 export interface CreateEventInput {
   artistUserId: string;
   organizationId: string | null;
@@ -44,8 +52,10 @@ export interface Repository {
   findUserByEmail(email: string): Promise<User | null>;
   findUserById(userId: string): Promise<User | null>;
   createUser(input: CreateUserInput): Promise<User>;
+  updateUserProfile(userId: string, patch: UpdateUserProfileInput): Promise<User | null>;
 
   listPublishedEvents(): Promise<Event[]>;
+  listPublishedEventsByArtist(artistUserId: string): Promise<Event[]>;
   findEventById(eventId: string): Promise<Event | null>;
   createEvent(input: CreateEventInput): Promise<Event>;
   updateEvent(eventId: string, patch: Partial<Event>): Promise<Event | null>;

@@ -28,6 +28,10 @@ model User {
   role           Role
   displayName    String
   organizationId String?
+  bio            String?
+  hometown       String?
+  profileImageUrl String?
+  websiteUrl     String?
   createdAt      DateTime
 
   events       Event[]       @relation("ArtistEvents")

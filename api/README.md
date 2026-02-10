@@ -5,6 +5,7 @@ This service is the first production backend slice for Ultra Fan.
 ## Included in this slice
 - Auth: signup/login and bearer-token auth
 - Roles: `fan`, `creator`, `org_admin`, `support_admin`
+- Creator profiles: public artist profile endpoints + editable creator bio/profile
 - Events: creator-owned create/read/update
 - Control room: rehearsal, go-live, end broadcast transitions
 - Tickets: purchase flow and fan library
@@ -58,6 +59,17 @@ curl -s http://localhost:4000/events/<EVENT_ID>/access-token \
 ```bash
 curl -s http://localhost:4000/events/<EVENT_ID>/chat/messages \
   -H "authorization: Bearer <FAN_TOKEN>"
+```
+7. Fan reads creator profile for event host:
+```bash
+curl -s http://localhost:4000/artists/<ARTIST_USER_ID>
+```
+8. Creator updates public profile shown to fans:
+```bash
+curl -s -X PATCH http://localhost:4000/me/creator-profile \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer <CREATOR_TOKEN>" \
+  -d '{"displayName":"DJ Nova","bio":"Global electronic artist.","hometown":"Toronto, CA","websiteUrl":"https://example.com"}'
 ```
 
 ## Postgres setup

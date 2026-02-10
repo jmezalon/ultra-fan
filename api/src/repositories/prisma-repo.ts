@@ -8,6 +8,7 @@ import {
   CreateUserInput,
   ListChatMessagesInput,
   Repository,
+  UpdateUserProfileInput,
 } from "./types.js";
 
 function mapUser(user: {
@@ -17,6 +18,10 @@ function mapUser(user: {
   role: string;
   displayName: string;
   organizationId: string | null;
+  bio: string | null;
+  hometown: string | null;
+  profileImageUrl: string | null;
+  websiteUrl: string | null;
   createdAt: Date;
 }): User {
   return {
@@ -26,6 +31,10 @@ function mapUser(user: {
     role: user.role as Role,
     displayName: user.displayName,
     organizationId: user.organizationId,
+    bio: user.bio,
+    hometown: user.hometown,
+    profileImageUrl: user.profileImageUrl,
+    websiteUrl: user.websiteUrl,
     createdAt: user.createdAt.toISOString(),
   };
 }
@@ -108,14 +117,43 @@ export class PrismaRepository implements Repository {
         role: input.role,
         displayName: input.displayName,
         organizationId: input.organizationId,
+        bio: null,
+        hometown: null,
+        profileImageUrl: null,
+        websiteUrl: null,
         createdAt: new Date(nowIso()),
       },
     });
     return mapUser(user);
   }
 
+  async updateUserProfile(userId: string, patch: UpdateUserProfileInput) {
+    const existing = await prisma.user.findUnique({ where: { id: userId } });
+    if (!existing) return null;
+
+    const data: Record<string, unknown> = {};
+    Object.entries(patch).forEach(([k, v]) => {
+      if (v === undefined || k === "id" || k === "email" || k === "role") return;
+      data[k] = v;
+    });
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data,
+    });
+    return mapUser(updated);
+  }
+
   async listPublishedEvents() {
     const rows = await prisma.event.findMany({ where: { published: true }, orderBy: { startsAt: "asc" } });
+    return rows.map(mapEvent);
+  }
+
+  async listPublishedEventsByArtist(artistUserId: string) {
+    const rows = await prisma.event.findMany({
+      where: { published: true, artistUserId },
+      orderBy: { startsAt: "asc" },
+    });
     return rows.map(mapEvent);
   }
 

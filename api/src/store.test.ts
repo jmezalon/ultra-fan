@@ -10,6 +10,10 @@ describe("store helpers", () => {
       role: "fan",
       displayName: "X",
       organizationId: null,
+      bio: null,
+      hometown: null,
+      profileImageUrl: null,
+      websiteUrl: null,
       createdAt: new Date().toISOString(),
     });
 

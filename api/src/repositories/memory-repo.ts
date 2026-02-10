@@ -7,6 +7,7 @@ import {
   CreateUserInput,
   ListChatMessagesInput,
   Repository,
+  UpdateUserProfileInput,
 } from "./types.js";
 
 export class MemoryRepository implements Repository {
@@ -26,14 +27,35 @@ export class MemoryRepository implements Repository {
       role: input.role,
       displayName: input.displayName,
       organizationId: input.organizationId,
+      bio: null,
+      hometown: null,
+      profileImageUrl: null,
+      websiteUrl: null,
       createdAt: nowIso(),
     };
     users.push(user);
     return user;
   }
 
+  async updateUserProfile(userId: string, patch: UpdateUserProfileInput) {
+    const user = users.find((u) => u.id === userId);
+    if (!user) return null;
+    if (patch.displayName !== undefined) user.displayName = patch.displayName;
+    if (patch.bio !== undefined) user.bio = patch.bio;
+    if (patch.hometown !== undefined) user.hometown = patch.hometown;
+    if (patch.profileImageUrl !== undefined) user.profileImageUrl = patch.profileImageUrl;
+    if (patch.websiteUrl !== undefined) user.websiteUrl = patch.websiteUrl;
+    return user;
+  }
+
   async listPublishedEvents() {
     return events.filter((e) => e.published);
+  }
+
+  async listPublishedEventsByArtist(artistUserId: string) {
+    return events
+      .filter((e) => e.published && e.artistUserId === artistUserId)
+      .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
   }
 
   async findEventById(eventId: string) {

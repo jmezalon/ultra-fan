@@ -7,7 +7,7 @@ import { AuthedRequest, requireAuth, requireRole } from "./middleware.js";
 import { MemoryRepository } from "./repositories/memory-repo.js";
 import { Repository } from "./repositories/types.js";
 import { nowIso, sanitizeUser } from "./store.js";
-import { Event } from "./types.js";
+import { CreatorProfile, Event, Role } from "./types.js";
 import { canAccessEventChat, canManageEvent, transitionBroadcast } from "./policy.js";
 
 const signupSchema = z.object({
@@ -46,8 +46,18 @@ const chatListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(300).default(200),
 });
 
+const updateCreatorProfileSchema = z.object({
+  displayName: z.string().trim().min(2).max(80).optional(),
+  bio: z.string().trim().max(1200).optional(),
+  hometown: z.string().trim().max(80).optional(),
+  profileImageUrl: z.string().url().optional(),
+  websiteUrl: z.string().url().optional(),
+});
+
 const CHAT_RETENTION_HOURS = 24;
 const CHAT_KEEPALIVE_MS = 15_000;
+
+const CREATOR_PROFILE_ROLES: Role[] = ["creator", "org_admin"];
 
 export function buildApp(repo: Repository = new MemoryRepository()) {
   const app = express();
@@ -109,6 +119,34 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
     } catch {
       return null;
     }
+  }
+
+  function isPublicCreatorRole(role: Role) {
+    return CREATOR_PROFILE_ROLES.includes(role);
+  }
+
+  function toCreatorProfile(user: {
+    id: string;
+    displayName: string;
+    bio: string | null;
+    hometown: string | null;
+    profileImageUrl: string | null;
+    websiteUrl: string | null;
+  }): CreatorProfile {
+    return {
+      userId: user.id,
+      displayName: user.displayName,
+      bio: user.bio,
+      hometown: user.hometown,
+      profileImageUrl: user.profileImageUrl,
+      websiteUrl: user.websiteUrl,
+    };
+  }
+
+  function normalizeOptionalText(value: string | undefined) {
+    if (value === undefined) return undefined;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
   }
 
   app.get("/health", (_req, res) => {
@@ -181,6 +219,47 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       return;
     }
     res.json({ user: sanitizeUser(user) });
+  });
+
+  app.patch(
+    "/me/creator-profile",
+    requireAuth,
+    requireRole("creator", "org_admin"),
+    async (req: AuthedRequest, res) => {
+      const parsed = updateCreatorProfileSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: parsed.error.flatten() });
+        return;
+      }
+
+      const patch = {
+        displayName: parsed.data.displayName?.trim(),
+        bio: normalizeOptionalText(parsed.data.bio),
+        hometown: normalizeOptionalText(parsed.data.hometown),
+        profileImageUrl: normalizeOptionalText(parsed.data.profileImageUrl),
+        websiteUrl: normalizeOptionalText(parsed.data.websiteUrl),
+      };
+
+      const updated = await repo.updateUserProfile(req.auth!.userId, patch);
+      if (!updated) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      res.json({ user: sanitizeUser(updated), artist: toCreatorProfile(updated) });
+    },
+  );
+
+  app.get("/artists/:artistUserId", async (req, res) => {
+    const artistUserId = String(req.params.artistUserId);
+    const user = await repo.findUserById(artistUserId);
+    if (!user || !isPublicCreatorRole(user.role)) {
+      res.status(404).json({ error: "Artist not found" });
+      return;
+    }
+
+    const events = await repo.listPublishedEventsByArtist(artistUserId);
+    res.json({ artist: toCreatorProfile(user), events });
   });
 
   app.get("/events", async (_req, res) => {

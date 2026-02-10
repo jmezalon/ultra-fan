@@ -52,3 +52,4 @@ Status: In progress
 - 2026-02-09: Connected prototype client to API-first fan and creator flows (`/me/library`, `/events/:id/access-token`, `/events/:id/control-room`, broadcast transition actions), including resilient error handling and route-aware data loading.
 - 2026-02-09: Replaced prototype UI shell with professional, flow-led client experience featuring explicit fan/creator journeys, stateful control-room timeline, responsive layout, and API-backed operational messaging.
 - 2026-02-09: Added entitlement/ownership-gated event chat backend with realtime SSE fan-out and persistent message storage (`ChatMessage`) retained for a minimum 24-hour replay window.
+- 2026-02-10: Added public artist profile support (`/artists/:artistUserId`) and creator-editable profile metadata, then integrated fan-facing host information on event pages plus a dedicated artist profile page.
