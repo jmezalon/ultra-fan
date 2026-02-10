@@ -581,17 +581,18 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       const whipBaseUrl = process.env.WHIP_BASE_URL ?? DEFAULT_WHIP_BASE_URL;
       const upstreamWhipUrl = buildWhipUpstreamUrl(whipBaseUrl, event.streamKey);
 
-      console.log(`[WHIP proxy] upstream=${upstreamWhipUrl} bodyType=${typeof req.body} bodyLen=${offerSdp.length} bodyStart=${offerSdp.substring(0, 40)}`);
-
+      const sdpBuffer = Buffer.from(offerSdp, "utf-8");
       let upstreamResponse: globalThis.Response;
       try {
         upstreamResponse = await fetch(upstreamWhipUrl, {
           method: "POST",
-          headers: { "content-type": "application/sdp" },
-          body: offerSdp,
+          headers: {
+            "content-type": "application/sdp",
+            "content-length": String(sdpBuffer.byteLength),
+          },
+          body: sdpBuffer,
         });
-      } catch (err) {
-        console.error(`[WHIP proxy] upstream fetch error:`, err);
+      } catch {
         res.status(502).json({
           error: "WHIP upstream unreachable. Verify WHIP_BASE_URL and MediaMTX network access.",
         });
@@ -601,7 +602,6 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       const upstreamBody = await upstreamResponse.text();
       if (!upstreamResponse.ok) {
         const summary = upstreamBody.trim();
-        console.log(`[WHIP proxy] upstream ${upstreamResponse.status}: ${summary}`);
         res.status(upstreamResponse.status).json({
           error: summary || `WHIP upstream failed (${upstreamResponse.status}).`,
         });
