@@ -150,6 +150,13 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
   app.set("trust proxy", true);
   app.use(cors());
   app.use(express.json({ limit: JSON_BODY_LIMIT }));
+
+  // Prevent browsers from caching API responses (stale broadcastState, etc.)
+  app.use("/api", (_req, res, next) => {
+    res.setHeader("Cache-Control", "no-store");
+    next();
+  });
+
   const chatStreams = new Map<string, Set<Response>>();
   const sourceDir = path.dirname(fileURLToPath(import.meta.url));
   const clientDir = path.resolve(sourceDir, "../../prototype");
@@ -790,8 +797,9 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
   }));
 
   if (fs.existsSync(clientIndexPath)) {
-    app.use(express.static(clientDir));
+    app.use(express.static(clientDir, { etag: true, lastModified: true, maxAge: 0 }));
     app.get("/", (_req, res) => {
+      res.setHeader("Cache-Control", "no-cache");
       res.sendFile(clientIndexPath);
     });
   }

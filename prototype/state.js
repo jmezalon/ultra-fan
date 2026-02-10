@@ -87,6 +87,7 @@ export async function apiRequest(path, opts = {}) {
     response = await fetch(`${state.apiBase}${path}`, {
       method: opts.method || "GET",
       headers,
+      cache: "no-store",
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
   } catch {
