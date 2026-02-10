@@ -103,10 +103,10 @@ export function eventDetailView(eventId) {
       <aside class="panel">
         <h3>Hosted By</h3>
         <div style="display:flex;gap:0.75rem;align-items:center;margin-top:0.75rem;">
-          <div style="width:56px;height:56px;border-radius:50%;overflow:hidden;background:var(--surface-3);display:grid;place-items:center;font-weight:700;color:var(--ink-secondary);">
+          <div style="position:relative;width:56px;height:56px;border-radius:50%;overflow:hidden;background:var(--surface-3);display:grid;place-items:center;font-weight:700;color:var(--ink-secondary);">
             ${
               artistImage
-                ? `<img src="${h(artistImage)}" alt="${h(artistName)}" style="width:100%;height:100%;object-fit:cover;" />`
+                ? `<img src="${h(artistImage)}" alt="${h(artistName)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;" />`
                 : h(artistName.slice(0, 1).toUpperCase())
             }
           </div>
@@ -498,8 +498,8 @@ export function accountView() {
     <div style="max-width:720px;margin:0 auto;">
       <section class="panel" style="margin-bottom:1.25rem;">
         <div style="display:flex;align-items:center;gap:1rem;">
-          <div style="width:64px;height:64px;border-radius:50%;background:var(--accent);display:grid;place-items:center;font-weight:700;font-size:1.25rem;color:#fff;flex-shrink:0;">
-            ${state.user.profileImageUrl ? `<img src="${h(state.user.profileImageUrl)}" alt="${h(state.user.displayName)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />` : h(initials)}
+          <div style="position:relative;width:64px;height:64px;border-radius:50%;background:var(--accent);overflow:hidden;display:grid;place-items:center;font-weight:700;font-size:1.25rem;color:#fff;flex-shrink:0;">
+            ${state.user.profileImageUrl ? `<img src="${h(state.user.profileImageUrl)}" alt="${h(state.user.displayName)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;" />` : h(initials)}
           </div>
           <div style="min-width:0;">
             <h2 style="margin:0;font-size:1.25rem;color:var(--ink);">${h(state.user.displayName)}</h2>
