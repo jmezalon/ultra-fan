@@ -3,12 +3,94 @@ import { showToast } from "./ui.js";
 let activeHlsPlayer = null;
 let cameraStream = null;
 let whipPeerConnection = null;
+let wakeLockSentinel = null;
+let wakeLockVideo = null;
+let wakeLockHandlers = null;
+let wakeLockVisibilityHandler = null;
+
+function canUseWakeLock() {
+  return typeof navigator !== "undefined" && Boolean(navigator.wakeLock?.request);
+}
+
+async function acquireWakeLock() {
+  if (!canUseWakeLock()) return;
+  if (wakeLockSentinel) return;
+  if (document.visibilityState !== "visible") return;
+
+  try {
+    wakeLockSentinel = await navigator.wakeLock.request("screen");
+    wakeLockSentinel.addEventListener("release", () => {
+      wakeLockSentinel = null;
+    });
+  } catch {
+    wakeLockSentinel = null;
+  }
+}
+
+async function releaseWakeLock() {
+  if (!wakeLockSentinel) return;
+  try {
+    await wakeLockSentinel.release();
+  } catch {
+    // Ignore release errors; we always clear local sentinel state.
+  }
+  wakeLockSentinel = null;
+}
+
+function detachWakeLock() {
+  if (wakeLockVideo && wakeLockHandlers) {
+    wakeLockVideo.removeEventListener("play", wakeLockHandlers.onPlay);
+    wakeLockVideo.removeEventListener("playing", wakeLockHandlers.onPlay);
+    wakeLockVideo.removeEventListener("pause", wakeLockHandlers.onPauseOrEnd);
+    wakeLockVideo.removeEventListener("ended", wakeLockHandlers.onPauseOrEnd);
+  }
+  if (wakeLockVisibilityHandler) {
+    document.removeEventListener("visibilitychange", wakeLockVisibilityHandler);
+  }
+  wakeLockVideo = null;
+  wakeLockHandlers = null;
+  wakeLockVisibilityHandler = null;
+  void releaseWakeLock();
+}
+
+function attachWakeLock(video) {
+  detachWakeLock();
+  if (!video) return;
+
+  wakeLockVideo = video;
+  wakeLockHandlers = {
+    onPlay: () => {
+      void acquireWakeLock();
+    },
+    onPauseOrEnd: () => {
+      void releaseWakeLock();
+    },
+  };
+
+  video.addEventListener("play", wakeLockHandlers.onPlay);
+  video.addEventListener("playing", wakeLockHandlers.onPlay);
+  video.addEventListener("pause", wakeLockHandlers.onPauseOrEnd);
+  video.addEventListener("ended", wakeLockHandlers.onPauseOrEnd);
+
+  wakeLockVisibilityHandler = () => {
+    if (!wakeLockVideo) return;
+    if (document.visibilityState !== "visible") {
+      void releaseWakeLock();
+      return;
+    }
+    if (!wakeLockVideo.paused && !wakeLockVideo.ended) {
+      void acquireWakeLock();
+    }
+  };
+  document.addEventListener("visibilitychange", wakeLockVisibilityHandler);
+}
 
 export function getCameraStream() {
   return cameraStream;
 }
 
 export function destroyPlayer() {
+  detachWakeLock();
   if (activeHlsPlayer) {
     activeHlsPlayer.destroy();
     activeHlsPlayer = null;
@@ -21,6 +103,7 @@ export function initHlsPlayer(hlsUrl) {
   const video = document.getElementById("hlsPlayer");
   const overlay = document.getElementById("playerOverlay");
   if (!video) return;
+  attachWakeLock(video);
 
   // Safari supports native HLS
   if (video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -49,8 +132,10 @@ export function initHlsPlayer(hlsUrl) {
 
   const hls = new Hls({
     enableWorker: true,
-    lowLatencyMode: true,
+    lowLatencyMode: false,
     backBufferLength: 30,
+    liveSyncDurationCount: 3,
+    liveMaxLatencyDurationCount: 6,
   });
 
   activeHlsPlayer = hls;
