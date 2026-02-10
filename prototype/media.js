@@ -105,8 +105,13 @@ export function initHlsPlayer(hlsUrl) {
   if (!video) return;
   attachWakeLock(video);
 
-  // Safari supports native HLS
-  if (video.canPlayType("application/vnd.apple.mpegurl")) {
+  // Prefer hls.js over native HLS — Safari's native player is too strict
+  // about LL-HLS part duration consistency and freezes on WebRTC streams.
+  // Fall back to native only on iOS where MSE may not be available.
+  if (typeof Hls !== "undefined" && Hls.isSupported()) {
+    // hls.js path — works on all desktop browsers including Safari
+  } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    // Native HLS fallback (iOS Safari without MSE)
     video.src = hlsUrl;
     video.addEventListener("loadedmetadata", () => {
       if (overlay) overlay.style.display = "none";
@@ -119,10 +124,7 @@ export function initHlsPlayer(hlsUrl) {
       }
     });
     return;
-  }
-
-  // Use hls.js for Chrome/Firefox
-  if (typeof Hls === "undefined" || !Hls.isSupported()) {
+  } else {
     if (overlay) {
       overlay.querySelector(".player-status").textContent =
         "HLS playback is not supported in this browser.";
@@ -132,7 +134,7 @@ export function initHlsPlayer(hlsUrl) {
 
   const hls = new Hls({
     enableWorker: true,
-    lowLatencyMode: false,
+    lowLatencyMode: true,
     backBufferLength: 30,
     liveSyncDurationCount: 3,
     liveMaxLatencyDurationCount: 6,
