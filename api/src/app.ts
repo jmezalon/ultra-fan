@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import cors from "cors";
-import express, { Request, Response } from "express";
+import express, { NextFunction, Request, Response } from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -67,6 +67,13 @@ const CHAT_RETENTION_HOURS = 24;
 const CHAT_KEEPALIVE_MS = 15_000;
 
 const CREATOR_PROFILE_ROLES: Role[] = ["creator", "org_admin"];
+
+/* Express 4 does not forward errors from async handlers to the error middleware.
+   This wrapper catches rejected promises and hands them to next(). */
+const asyncHandler =
+  (fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) =>
+  (req: Request, res: Response, next: NextFunction) =>
+    fn(req, res, next).catch(next);
 
 export function buildApp(repo: Repository = new MemoryRepository()) {
   const app = express();
@@ -184,7 +191,7 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
     res.json({ ok: true, service: "ultra-fan-api", now: nowIso() });
   });
 
-  app.post("/auth/signup", async (req, res) => {
+  app.post("/auth/signup", asyncHandler(async (req, res) => {
     const parsed = signupSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten() });
@@ -213,9 +220,9 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
     });
 
     res.status(201).json({ user: sanitizeUser(user), accessToken });
-  });
+  }));
 
-  app.post("/auth/login", async (req, res) => {
+  app.post("/auth/login", asyncHandler(async (req, res) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten() });
@@ -241,22 +248,22 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
     });
 
     res.json({ user: sanitizeUser(user), accessToken });
-  });
+  }));
 
-  app.get("/me", requireAuth, async (req: AuthedRequest, res) => {
+  app.get("/me", requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
     const user = await repo.findUserById(req.auth!.userId);
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
     }
     res.json({ user: sanitizeUser(user) });
-  });
+  }));
 
   app.patch(
     "/me/creator-profile",
     requireAuth,
     requireRole("creator", "org_admin"),
-    async (req: AuthedRequest, res) => {
+    asyncHandler(async (req: AuthedRequest, res) => {
       const parsed = updateCreatorProfileSchema.safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({ error: parsed.error.flatten() });
@@ -278,10 +285,10 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       }
 
       res.json({ user: sanitizeUser(updated), artist: toCreatorProfile(updated) });
-    },
+    }),
   );
 
-  app.get("/artists/:artistUserId", async (req, res) => {
+  app.get("/artists/:artistUserId", asyncHandler(async (req, res) => {
     const artistUserId = String(req.params.artistUserId);
     const user = await repo.findUserById(artistUserId);
     if (!user || !isPublicCreatorRole(user.role)) {
@@ -291,14 +298,14 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
 
     const events = await repo.listPublishedEventsByArtist(artistUserId);
     res.json({ artist: toCreatorProfile(user), events });
-  });
+  }));
 
-  app.get("/events", async (_req, res) => {
+  app.get("/events", asyncHandler(async (_req, res) => {
     const published = await repo.listPublishedEvents();
     res.json({ events: published });
-  });
+  }));
 
-  app.post("/events", requireAuth, requireRole("creator", "org_admin"), async (req: AuthedRequest, res) => {
+  app.post("/events", requireAuth, requireRole("creator", "org_admin"), asyncHandler(async (req: AuthedRequest, res) => {
     const parsed = createEventSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten() });
@@ -320,18 +327,18 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
     });
 
     res.status(201).json({ event });
-  });
+  }));
 
-  app.get("/events/:eventId", async (req, res) => {
+  app.get("/events/:eventId", asyncHandler(async (req, res) => {
     const event = await repo.findEventById(String(req.params.eventId));
     if (!event) {
       res.status(404).json({ error: "Event not found" });
       return;
     }
     res.json({ event });
-  });
+  }));
 
-  app.patch("/events/:eventId", requireAuth, requireRole("creator", "org_admin", "support_admin"), async (req: AuthedRequest, res) => {
+  app.patch("/events/:eventId", requireAuth, requireRole("creator", "org_admin", "support_admin"), asyncHandler(async (req: AuthedRequest, res) => {
     const event = await repo.findEventById(String(req.params.eventId));
     if (!event) {
       res.status(404).json({ error: "Event not found" });
@@ -350,9 +357,9 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
 
     const updated = await repo.updateEvent(event.id, parsed.data as Partial<Event>);
     res.json({ event: updated });
-  });
+  }));
 
-  app.post("/events/:eventId/purchase", requireAuth, requireRole("fan", "support_admin", "org_admin", "creator"), async (req: AuthedRequest, res) => {
+  app.post("/events/:eventId/purchase", requireAuth, requireRole("fan", "support_admin", "org_admin", "creator"), asyncHandler(async (req: AuthedRequest, res) => {
     const event = await repo.findEventById(String(req.params.eventId));
     if (!event || !event.published) {
       res.status(404).json({ error: "Event not available" });
@@ -368,14 +375,14 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
     await repo.createTicket({ userId: req.auth!.userId, eventId: event.id });
 
     res.status(201).json({ ok: true, eventId: event.id });
-  });
+  }));
 
-  app.get("/me/library", requireAuth, async (req: AuthedRequest, res) => {
+  app.get("/me/library", requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
     const library = await repo.listLibraryEvents(req.auth!.userId);
     res.json({ events: library });
-  });
+  }));
 
-  app.get("/events/:eventId/chat/messages", requireAuth, async (req: AuthedRequest, res) => {
+  app.get("/events/:eventId/chat/messages", requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
     const event = await repo.findEventById(String(req.params.eventId));
     if (!event) {
       res.status(404).json({ error: "Event not found" });
@@ -408,9 +415,9 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
     });
 
     res.json({ eventId: event.id, retentionHours: CHAT_RETENTION_HOURS, messages });
-  });
+  }));
 
-  app.post("/events/:eventId/chat/messages", requireAuth, async (req: AuthedRequest, res) => {
+  app.post("/events/:eventId/chat/messages", requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
     const parsedBody = chatMessageSchema.safeParse(req.body);
     if (!parsedBody.success) {
       res.status(400).json({ error: parsedBody.error.flatten() });
@@ -447,9 +454,9 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
 
     publishChatEvent(event.id, { type: "chat.message", message });
     res.status(201).json({ message });
-  });
+  }));
 
-  app.get("/events/:eventId/chat/stream", async (req, res) => {
+  app.get("/events/:eventId/chat/stream", asyncHandler(async (req, res) => {
     const auth = readSseAuth(req);
     if (!auth) {
       res.status(401).json({ error: "Missing or invalid token" });
@@ -494,9 +501,9 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       closeChatStream(event.id, res);
       res.end();
     });
-  });
+  }));
 
-  app.get("/events/:eventId/control-room", requireAuth, requireRole("creator", "org_admin", "support_admin"), async (req: AuthedRequest, res) => {
+  app.get("/events/:eventId/control-room", requireAuth, requireRole("creator", "org_admin", "support_admin"), asyncHandler(async (req: AuthedRequest, res) => {
     const event = await repo.findEventById(String(req.params.eventId));
     if (!event) {
       res.status(404).json({ error: "Event not found" });
@@ -518,9 +525,9 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       broadcastState: event.broadcastState,
       rehearsalActive: event.rehearsalActive,
     });
-  });
+  }));
 
-  app.post("/events/:eventId/broadcast/rehearsal/start", requireAuth, requireRole("creator", "org_admin", "support_admin"), async (req: AuthedRequest, res) => {
+  app.post("/events/:eventId/broadcast/rehearsal/start", requireAuth, requireRole("creator", "org_admin", "support_admin"), asyncHandler(async (req: AuthedRequest, res) => {
     const event = await repo.findEventById(String(req.params.eventId));
     if (!event) {
       res.status(404).json({ error: "Event not found" });
@@ -540,9 +547,9 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
     }
-  });
+  }));
 
-  app.post("/events/:eventId/broadcast/go-live", requireAuth, requireRole("creator", "org_admin", "support_admin"), async (req: AuthedRequest, res) => {
+  app.post("/events/:eventId/broadcast/go-live", requireAuth, requireRole("creator", "org_admin", "support_admin"), asyncHandler(async (req: AuthedRequest, res) => {
     const event = await repo.findEventById(String(req.params.eventId));
     if (!event) {
       res.status(404).json({ error: "Event not found" });
@@ -562,9 +569,9 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
     }
-  });
+  }));
 
-  app.post("/events/:eventId/broadcast/end", requireAuth, requireRole("creator", "org_admin", "support_admin"), async (req: AuthedRequest, res) => {
+  app.post("/events/:eventId/broadcast/end", requireAuth, requireRole("creator", "org_admin", "support_admin"), asyncHandler(async (req: AuthedRequest, res) => {
     const event = await repo.findEventById(String(req.params.eventId));
     if (!event) {
       res.status(404).json({ error: "Event not found" });
@@ -584,9 +591,9 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
     }
-  });
+  }));
 
-  app.get("/events/:eventId/access-token", requireAuth, async (req: AuthedRequest, res) => {
+  app.get("/events/:eventId/access-token", requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
     const event = await repo.findEventById(String(req.params.eventId));
     if (!event || !event.published) {
       res.status(404).json({ error: "Event not available" });
@@ -614,7 +621,7 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       streamPath: `/live/${event.streamKey}/index.m3u8`,
       expiresInSec: 300,
     });
-  });
+  }));
 
   if (fs.existsSync(clientIndexPath)) {
     app.use(express.static(clientDir));
@@ -622,6 +629,22 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
       res.sendFile(clientIndexPath);
     });
   }
+
+  // Global error handler – returns a proper JSON response instead of crashing.
+  app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+    const isDbError =
+      err.constructor?.name === "PrismaClientInitializationError" ||
+      err.constructor?.name === "PrismaClientKnownRequestError" ||
+      err.message?.includes("Can't reach database server");
+
+    console.error(isDbError ? "Database error:" : "Unhandled error:", err.message);
+
+    if (isDbError) {
+      res.status(503).json({ error: "Service temporarily unavailable" });
+      return;
+    }
+    res.status(500).json({ error: "Internal server error" });
+  });
 
   return app;
 }
