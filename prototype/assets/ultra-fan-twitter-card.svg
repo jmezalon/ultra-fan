@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Ultra Fan Social Preview</title>
+  <desc id="desc">Ultra Fan live concert platform social card with brand logo and title.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b1713" />
+      <stop offset="50%" stop-color="#145f47" />
+      <stop offset="100%" stop-color="#f06f3c" />
+    </linearGradient>
+    <radialGradient id="glowOne" cx="75%" cy="20%" r="50%">
+      <stop offset="0%" stop-color="rgba(240,111,60,0.45)" />
+      <stop offset="100%" stop-color="rgba(240,111,60,0)" />
+    </radialGradient>
+    <radialGradient id="glowTwo" cx="25%" cy="80%" r="50%">
+      <stop offset="0%" stop-color="rgba(26,138,101,0.55)" />
+      <stop offset="100%" stop-color="rgba(26,138,101,0)" />
+    </radialGradient>
+    <linearGradient id="logoBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#145f47" />
+      <stop offset="55%" stop-color="#1a8a65" />
+      <stop offset="100%" stop-color="#f06f3c" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)" />
+  <rect width="1200" height="630" fill="url(#glowOne)" />
+  <rect width="1200" height="630" fill="url(#glowTwo)" />
+
+  <rect x="86" y="170" width="290" height="290" rx="64" fill="url(#logoBg)" />
+  <path
+    d="M245 206L157 330H214L198 426L291 296H236L245 206Z"
+    fill="#ffffff"
+    stroke="#e4fff5"
+    stroke-width="6"
+    stroke-linejoin="round"
+  />
+
+  <text
+    x="430"
+    y="300"
+    fill="#f0fff8"
+    font-family="Space Grotesk, Manrope, Avenir Next, sans-serif"
+    font-weight="700"
+    font-size="88"
+    letter-spacing="3"
+  >
+    ULTRA FAN
+  </text>
+  <text
+    x="430"
+    y="372"
+    fill="#d9efe7"
+    font-family="Manrope, Avenir Next, sans-serif"
+    font-weight="600"
+    font-size="38"
+  >
+    Live Concert Experience
+  </text>
+  <text
+    x="430"
+    y="430"
+    fill="#ecfff8"
+    font-family="Manrope, Avenir Next, sans-serif"
+    font-weight="500"
+    font-size="30"
+    opacity="0.9"
+  >
+    Ticketed livestreams with creator-grade control room
+  </text>
+</svg>

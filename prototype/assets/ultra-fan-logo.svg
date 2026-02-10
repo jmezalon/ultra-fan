@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Ultra Fan Logo</title>
+  <desc id="desc">Rounded square logo with a lightning mark for Ultra Fan.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#145f47" />
+      <stop offset="55%" stop-color="#1a8a65" />
+      <stop offset="100%" stop-color="#f06f3c" />
+    </linearGradient>
+    <linearGradient id="bolt" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#f0fff8" />
+      <stop offset="100%" stop-color="#ffffff" />
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="224" height="224" rx="56" fill="url(#bg)" />
+  <path
+    d="M146 44L78 138H122L108 212L178 112H136L146 44Z"
+    fill="url(#bolt)"
+    stroke="#e4fff5"
+    stroke-width="4"
+    stroke-linejoin="round"
+  />
+</svg>
