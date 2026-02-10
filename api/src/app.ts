@@ -98,44 +98,6 @@ export function buildWhipUpstreamUrl(whipBaseUrl: string, streamKey: string) {
   return `${whipBaseUrl.replace(/\/+$/, "")}/live/${streamKey}/whip`;
 }
 
-/**
- * Strip H265/HEVC from an SDP offer — MediaMTX v1.12 (pion/webrtc) cannot
- * parse it and returns EOF.  Removes H265 payload types from the m= line and
- * all associated a= attribute lines (rtpmap, fmtp, rtcp-fb) plus the
- * companion rtx entry.
- */
-export function stripH265FromSdp(sdp: string): string {
-  const lines = sdp.split(/\r?\n/);
-  // First pass: find H265 payload types and their rtx companions
-  const h265Pts = new Set<string>();
-  const rtxPts = new Set<string>();
-  for (const line of lines) {
-    const m = line.match(/^a=rtpmap:(\d+)\s+H265\//i);
-    if (m) h265Pts.add(m[1]);
-  }
-  if (h265Pts.size === 0) return sdp;
-  // Find rtx entries whose apt points to an H265 pt
-  for (const line of lines) {
-    const m = line.match(/^a=fmtp:(\d+)\s+apt=(\d+)/);
-    if (m && h265Pts.has(m[2])) rtxPts.add(m[1]);
-  }
-  const removePts = new Set([...h265Pts, ...rtxPts]);
-  const out: string[] = [];
-  for (const line of lines) {
-    // Strip payload types from m=video line
-    if (line.startsWith("m=video ")) {
-      const parts = line.split(" ");
-      const filtered = parts.filter((p, i) => i < 3 || !removePts.has(p));
-      out.push(filtered.join(" "));
-      continue;
-    }
-    // Strip a=rtpmap / a=fmtp / a=rtcp-fb lines for removed payload types
-    const attrMatch = line.match(/^a=(?:rtpmap|fmtp|rtcp-fb):(\d+)\b/);
-    if (attrMatch && removePts.has(attrMatch[1])) continue;
-    out.push(line);
-  }
-  return out.join("\r\n");
-}
 
 export function buildApp(repo: Repository = new MemoryRepository()) {
   const app = express();
@@ -613,17 +575,17 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
         return;
       }
 
-      const rawSdp = typeof req.body === "string" ? req.body.trim() : "";
-      if (!rawSdp) {
+      const offerSdp = typeof req.body === "string" ? req.body.trim() : "";
+      if (!offerSdp) {
         res.status(400).json({ error: "Missing SDP offer body." });
         return;
       }
-      const offerSdp = stripH265FromSdp(rawSdp);
 
       const whipBaseUrl = process.env.WHIP_BASE_URL ?? DEFAULT_WHIP_BASE_URL;
       const upstreamWhipUrl = buildWhipUpstreamUrl(whipBaseUrl, event.streamKey);
 
-      const sdpBuffer = Buffer.from(offerSdp, "utf-8");
+      // pion/webrtc requires a trailing CRLF; .trim() above strips it.
+      const sdpBuffer = Buffer.from(offerSdp + "\r\n", "utf-8");
       const url = new URL(upstreamWhipUrl);
       const transport = url.protocol === "https:" ? https : http;
 
