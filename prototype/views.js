@@ -384,6 +384,7 @@ export function creatorView() {
             <label>Price USD<input name="priceUsd" type="number" value="19.99" step="0.01" min="0" required /></label>
             <label>Replay Hours<input name="replayHours" type="number" value="24" min="0" max="168" required /></label>
             <label class="span-2">Image URL<input name="imageUrl" type="url" placeholder="https://example.com/image.jpg" /></label>
+            <label class="span-2">Or upload from device<input name="imageFile" type="file" accept="image/jpeg,image/png,image/gif,image/webp" /></label>
           </div>
           <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;cursor:pointer;">
             <input name="published" type="checkbox" checked style="width:auto;margin:0;" /> Publish immediately
@@ -521,7 +522,10 @@ export function accountView() {
           <label>Display Name<input name="displayName" value="${h(state.user.displayName || "")}" required /></label>
           <label>Bio<textarea name="bio" placeholder="Tell fans your story and music style...">${h(state.user.bio || "")}</textarea></label>
           <label>Hometown<input name="hometown" value="${h(state.user.hometown || "")}" placeholder="City, Country" /></label>
-          <label>Profile Image URL<input name="profileImageUrl" type="url" value="${h(state.user.profileImageUrl || "")}" placeholder="https://..." /></label>
+          <label>Profile Image
+            ${state.user.profileImageUrl ? `<div style="margin:0.35rem 0;"><img src="${h(state.user.profileImageUrl)}" alt="Current profile image" style="width:64px;height:64px;object-fit:cover;border-radius:50%;border:2px solid var(--line);" /></div>` : ""}
+            <input name="profileImageFile" type="file" accept="image/jpeg,image/png,image/gif,image/webp" />
+          </label>
           <label>Website URL<input name="websiteUrl" type="url" value="${h(state.user.websiteUrl || "")}" placeholder="https://..." /></label>
           <button class="btn primary" type="submit">Save Artist Profile</button>
         </form>

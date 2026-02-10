@@ -101,6 +101,28 @@ export async function apiRequest(path, opts = {}) {
   return payload;
 }
 
+export async function uploadFile(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  let response;
+  try {
+    response = await fetch(`${state.apiBase}/uploads`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${state.token}` },
+      body: formData,
+    });
+  } catch {
+    throw new Error("Could not reach API for file upload.");
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(normalizeApiError(payload, response.status));
+  }
+  return payload.url;
+}
+
 export function mergeEvent(event) {
   if (!event?.id) return;
 

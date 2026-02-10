@@ -1,6 +1,7 @@
 import {
   state,
   apiRequest,
+  uploadFile,
   mergeEvent,
   getEvent,
   getControlRoomEvent,
@@ -466,10 +467,15 @@ function attachEventHandlers() {
         published: Boolean(formData.get("published")),
       };
       const imageUrl = String(formData.get("imageUrl") || "").trim();
-      if (imageUrl) body.imageUrl = imageUrl;
+      const imageFile = createEventForm.querySelector('input[name="imageFile"]')?.files?.[0];
 
       setLoading(true);
       try {
+        if (imageFile) {
+          body.imageUrl = await uploadFile(imageFile);
+        } else if (imageUrl) {
+          body.imageUrl = imageUrl;
+        }
         const data = await apiRequest("/events", { method: "POST", body });
         if (data.event) mergeEvent(data.event);
         await refreshEvents();
@@ -488,16 +494,19 @@ function attachEventHandlers() {
     creatorProfileForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const formData = new FormData(creatorProfileForm);
+      const profileImageFile = creatorProfileForm.querySelector('input[name="profileImageFile"]')?.files?.[0];
       const body = {
         displayName: String(formData.get("displayName") || "").trim(),
         bio: String(formData.get("bio") || "").trim(),
         hometown: String(formData.get("hometown") || "").trim(),
-        profileImageUrl: String(formData.get("profileImageUrl") || "").trim(),
         websiteUrl: String(formData.get("websiteUrl") || "").trim(),
       };
 
       setLoading(true);
       try {
+        if (profileImageFile) {
+          body.profileImageUrl = await uploadFile(profileImageFile);
+        }
         const data = await apiRequest("/me/creator-profile", {
           method: "PATCH",
           body,
