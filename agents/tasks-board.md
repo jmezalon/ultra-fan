@@ -2,7 +2,7 @@
 
 ## Track 1: Architecture
 Owner: Architect Agent
-Status: In progress (backend foundation + realtime chat persistence added)
+Status: In progress (backend foundation + realtime chat persistence added; creator image upload payload/legacy path reliability hardened)
 
 1. Define auth/authz model with role + ownership policy matrix.
 2. Define event/broadcast/ticket/entitlement schema.
@@ -57,3 +57,4 @@ Status: In progress
 - 2026-02-10: Added social metadata in the prototype client (`twitter:card` and Open Graph tags), shipped a branded Twitter card image, and set the Ultra Fan logo as favicon/app icon.
 - 2026-02-10: Fixed portrait rendering fallbacks across account/profile surfaces, added navbar avatar image support with initial fallback, and surfaced chat participant avatars next to names.
 - 2026-02-10: Handoff note (Design -> Architecture): Added optional chat payload enrichment (`userProfileImageUrl`) so chat UI can render participant avatars when available without relaxing authz/entitlement checks.
+- 2026-02-10: Fixed creator profile image upload reliability by increasing JSON payload limit for base64 image submissions, returning HTTP 413 for oversized payloads, and restoring `/uploads/*` compatibility in image validation + static serving for legacy stored paths.
