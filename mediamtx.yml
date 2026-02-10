@@ -1,0 +1,17 @@
+logLevel: info
+rtmp: yes
+rtmpAddress: :1935
+hls: yes
+hlsAddress: :8888
+hlsAllowOrigins: ['*']
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+rtsp: no
+webrtc: yes
+webrtcAddress: :8889
+webrtcAllowOrigins: ['*']
+srt: no
+paths:
+  all:

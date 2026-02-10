@@ -3,14 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ultra Fan Client</title>
+    <title>Ultra Fan | Live Concert Experience</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <header class="site-header">
-      <div class="brand-wrap">
-        <p class="eyebrow">Live Concert Platform</p>
-        <div class="brand">ULTRA FAN</div>
+      <div class="header-left">
+        <div class="brand">
+          <span class="brand-icon">&#9889;</span>
+          <span class="brand-text">ULTRA FAN</span>
+        </div>
       </div>
       <nav class="main-nav" aria-label="Primary">
         <button data-route="discover" class="nav-btn active">Discover</button>
@@ -18,10 +20,16 @@
         <button data-route="creator" class="nav-btn">Creator Studio</button>
         <button data-route="account" class="nav-btn">Account</button>
       </nav>
+      <div class="header-right">
+        <div id="userIndicator" class="user-indicator"></div>
+      </div>
     </header>
 
     <main id="app" aria-live="polite"></main>
 
+    <div id="toastContainer" class="toast-container" aria-live="assertive"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
     <script src="./app.js" type="module"></script>
   </body>
 </html>

@@ -1,6 +1,8 @@
 const CREATOR_ROLES = new Set(["creator", "org_admin", "support_admin"]);
 
 let activeHlsPlayer = null;
+let cameraStream = null;
+let whipPeerConnection = null;
 
 function destroyPlayer() {
   if (activeHlsPlayer) {
@@ -85,6 +87,90 @@ function initHlsPlayer(hlsUrl) {
       }
     }
   });
+}
+
+async function startCameraBroadcast(streamKey) {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  } catch {
+    showToast("Camera access denied or unavailable.", "error");
+    return;
+  }
+
+  const preview = document.getElementById("cameraPreview");
+  const overlay = document.getElementById("cameraOverlay");
+  if (preview) {
+    preview.srcObject = cameraStream;
+    if (overlay) overlay.style.display = "none";
+  }
+
+  const pc = new RTCPeerConnection();
+  whipPeerConnection = pc;
+
+  for (const track of cameraStream.getTracks()) {
+    pc.addTrack(track, cameraStream);
+  }
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  const whipUrl = `http://localhost:8889/live/${encodeURIComponent(streamKey)}/whip`;
+  let response;
+  try {
+    response = await fetch(whipUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/sdp" },
+      body: pc.localDescription.sdp,
+    });
+  } catch {
+    showToast("Could not reach MediaMTX WebRTC endpoint.", "error");
+    stopCameraBroadcast();
+    return;
+  }
+
+  if (!response.ok) {
+    showToast(`WHIP failed (${response.status}).`, "error");
+    stopCameraBroadcast();
+    return;
+  }
+
+  const answerSdp = await response.text();
+  await pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: answerSdp }));
+
+  showToast("Broadcasting started.", "success");
+  updateCameraButtons();
+}
+
+function stopCameraBroadcast() {
+  if (whipPeerConnection) {
+    whipPeerConnection.close();
+    whipPeerConnection = null;
+  }
+  if (cameraStream) {
+    for (const track of cameraStream.getTracks()) {
+      track.stop();
+    }
+    cameraStream = null;
+  }
+
+  const preview = document.getElementById("cameraPreview");
+  const overlay = document.getElementById("cameraOverlay");
+  if (preview) preview.srcObject = null;
+  if (overlay) {
+    overlay.style.display = "";
+    const status = overlay.querySelector(".player-status");
+    if (status) status.textContent = 'Click "Start Camera" to begin';
+  }
+
+  showToast("Broadcasting stopped.", "info");
+  updateCameraButtons();
+}
+
+function updateCameraButtons() {
+  const startBtn = document.querySelector("[data-action='start-camera']");
+  const stopBtn = document.querySelector("[data-action='stop-camera']");
+  if (startBtn) startBtn.disabled = Boolean(cameraStream);
+  if (stopBtn) stopBtn.disabled = !cameraStream;
 }
 
 const state = {
@@ -529,6 +615,13 @@ async function navigateTo(route, options = {}) {
     closeChatStream();
   }
 
+  const leavingControl =
+    state.route === "control" &&
+    (route !== "control" || targetEventId !== state.routeEventId);
+  if (leavingControl && cameraStream) {
+    stopCameraBroadcast();
+  }
+
   state.route = route;
   state.routeEventId = targetEventId;
   setActiveNav(route);
@@ -923,16 +1016,31 @@ function controlRoomView(eventId) {
     </div>
 
     <section class="layout" style="margin-top:1.25rem;">
-      <article class="panel">
-        <h3>Ingest Configuration</h3>
-        <div style="margin-top:0.75rem;">
-          <label>Server URL<input value="${h(event.ingestUrl || "Not yet assigned")}" readonly style="opacity:0.7;cursor:default;" /></label>
-          <label>Stream Key<input value="${h(event.streamKey || "Not yet assigned")}" readonly style="opacity:0.7;cursor:default;" type="password" /></label>
+      <article>
+        <div class="panel" style="margin-bottom:1rem;">
+          <h3>Camera Preview</h3>
+          <div class="camera-preview" id="cameraPreviewContainer" style="margin-top:0.75rem;">
+            <video id="cameraPreview" class="hls-video" autoplay playsinline muted></video>
+            <div class="player-overlay" id="cameraOverlay">
+              <p class="player-status">Click "Start Camera" to begin</p>
+            </div>
+          </div>
+          <div class="row" style="margin-top:0.75rem;">
+            <button class="btn primary" data-action="start-camera" data-key="${h(event.streamKey || "")}" ${cameraStream ? "disabled" : ""}>Start Camera</button>
+            <button class="btn warn" data-action="stop-camera" ${cameraStream ? "" : "disabled"}>Stop Camera</button>
+          </div>
         </div>
-        <div class="row" style="margin-top:0.5rem;">
-          <button class="btn" data-action="copy-ingest" data-id="${h(event.id)}">Copy URL</button>
-          <button class="btn" data-action="copy-key" data-id="${h(event.id)}">Copy Key</button>
-        </div>
+        <details class="panel">
+          <summary style="cursor:pointer;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.95rem;color:var(--ink);">OBS / External Ingest</summary>
+          <div style="margin-top:0.75rem;">
+            <label>Server URL<input value="${h(event.ingestUrl || "Not yet assigned")}" readonly style="opacity:0.7;cursor:default;" /></label>
+            <label>Stream Key<input value="${h(event.streamKey || "Not yet assigned")}" readonly style="opacity:0.7;cursor:default;" type="password" /></label>
+          </div>
+          <div class="row" style="margin-top:0.5rem;">
+            <button class="btn" data-action="copy-ingest" data-id="${h(event.id)}">Copy URL</button>
+            <button class="btn" data-action="copy-key" data-id="${h(event.id)}">Copy Key</button>
+          </div>
+        </details>
       </article>
 
       <aside class="panel">
@@ -1195,6 +1303,23 @@ function attachEventHandlers() {
     });
   });
 
+  [...app.querySelectorAll("[data-action='start-camera']")].forEach((button) => {
+    button.addEventListener("click", async () => {
+      const key = button.dataset.key;
+      if (!key) {
+        showToast("Stream key not available yet.", "error");
+        return;
+      }
+      await startCameraBroadcast(key);
+    });
+  });
+
+  [...app.querySelectorAll("[data-action='stop-camera']")].forEach((button) => {
+    button.addEventListener("click", () => {
+      stopCameraBroadcast();
+    });
+  });
+
   [...app.querySelectorAll("[data-action='copy-ingest']")].forEach((button) => {
     button.addEventListener("click", () => {
       const event = getControlRoomEvent(button.dataset.id);
@@ -1363,6 +1488,15 @@ function render() {
   attachEventHandlers();
   renderUserIndicator();
   renderLoadingBar();
+
+  if (state.route === "control" && cameraStream) {
+    const preview = document.getElementById("cameraPreview");
+    const overlay = document.getElementById("cameraOverlay");
+    if (preview) {
+      preview.srcObject = cameraStream;
+      if (overlay) overlay.style.display = "none";
+    }
+  }
 
   if (state.route === "watch" && state.routeEventId) {
     const streamInfo = state.streamInfoByEvent[state.routeEventId];

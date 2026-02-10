@@ -576,6 +576,52 @@ main {
   color: white;
 }
 
+/* ── HLS Video Player ── */
+
+.hls-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  border-radius: var(--radius-lg);
+  z-index: 1;
+}
+
+.player-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 2;
+  background: rgba(5, 5, 8, 0.85);
+  border-radius: var(--radius-lg);
+  pointer-events: none;
+}
+
+.player-status {
+  color: var(--ink-secondary);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.player:has(.hls-video) {
+  aspect-ratio: 16 / 9;
+  min-height: unset;
+  padding: 0;
+}
+
+/* ── Camera Preview ── */
+
+.camera-preview {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
 /* ── Chat Panel ── */
 
 .chat-panel {
