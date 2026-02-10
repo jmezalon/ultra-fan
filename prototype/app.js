@@ -6,6 +6,7 @@ import {
   getEvent,
   getControlRoomEvent,
   ensureEvent,
+  refreshEvent,
   refreshEvents,
   refreshArtistProfile,
   refreshLibrary,
@@ -133,7 +134,11 @@ async function navigateTo(route, options = {}) {
 
     if (resolvedRoute === "event" || resolvedRoute === "watch") {
       if (options.eventId) {
-        const event = await ensureEvent(options.eventId);
+        // For the watch view, always fetch fresh event data so broadcastState
+        // reflects the current server state (e.g. creator just went live).
+        const event = resolvedRoute === "watch"
+          ? await refreshEvent(options.eventId)
+          : await ensureEvent(options.eventId);
         if (event?.artistUserId) {
           try {
             await refreshArtistProfile(event.artistUserId);
@@ -220,7 +225,7 @@ async function onCheckAccess(eventId) {
 
   setLoading(true);
   try {
-    await ensureEvent(eventId);
+    await refreshEvent(eventId);
     const data = await apiRequest(`/events/${eventId}/access-token`);
     state.streamInfoByEvent[eventId] = data;
     setNotice("Playback token issued.", "success");
