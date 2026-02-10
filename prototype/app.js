@@ -260,6 +260,7 @@ function setActiveNav(route) {
   let navRoute = route;
   if (route === "event" || route === "watch") navRoute = "discover";
   if (route === "control") navRoute = "creator";
+  if (route === "signin" || route === "signup") navRoute = "account";
 
   navButtons.find((button) => button.dataset.route === navRoute)?.classList.add("active");
 }
@@ -316,7 +317,7 @@ function renderUserIndicator() {
     `;
   } else {
     el.innerHTML = `<button class="btn ghost" style="padding:0.35rem 0.75rem;font-size:0.8rem;">Sign In</button>`;
-    el.querySelector("button")?.addEventListener("click", () => navigateTo("account"));
+    el.querySelector("button")?.addEventListener("click", () => navigateTo("signin"));
   }
 }
 
@@ -351,7 +352,7 @@ function clearSession() {
 function requireAuthRoute() {
   if (state.token) return true;
   setNotice("Sign in first to continue.", "info");
-  state.route = "account";
+  state.route = "signin";
   state.routeEventId = null;
   setActiveNav("account");
   render();
@@ -607,52 +608,60 @@ async function hydrateUser() {
 }
 
 async function navigateTo(route, options = {}) {
+  let resolvedRoute = route;
+  if (route === "account" && !state.user) {
+    resolvedRoute = "signin";
+  }
+  if ((route === "signin" || route === "signup") && state.user) {
+    resolvedRoute = "account";
+  }
+
   const targetEventId = options.eventId || null;
   const leavingWatch =
     state.route === "watch" &&
-    (route !== "watch" || targetEventId !== state.routeEventId);
+    (resolvedRoute !== "watch" || targetEventId !== state.routeEventId);
   if (leavingWatch) {
     closeChatStream();
   }
 
   const leavingControl =
     state.route === "control" &&
-    (route !== "control" || targetEventId !== state.routeEventId);
+    (resolvedRoute !== "control" || targetEventId !== state.routeEventId);
   if (leavingControl && cameraStream) {
     stopCameraBroadcast();
   }
 
-  state.route = route;
+  state.route = resolvedRoute;
   state.routeEventId = targetEventId;
-  setActiveNav(route);
+  setActiveNav(resolvedRoute);
   setLoading(true);
 
   try {
-    if (route === "discover") {
+    if (resolvedRoute === "discover") {
       await refreshEvents();
     }
 
-    if (route === "library") {
+    if (resolvedRoute === "library") {
       if (!requireAuthRoute()) return;
       await refreshLibrary();
     }
 
-    if (route === "event" || route === "watch") {
+    if (resolvedRoute === "event" || resolvedRoute === "watch") {
       if (options.eventId) {
         await ensureEvent(options.eventId);
       }
     }
 
-    if (route === "watch" && options.eventId && state.token) {
+    if (resolvedRoute === "watch" && options.eventId && state.token) {
       await loadChatHistory(options.eventId);
       ensureChatStream(options.eventId);
     }
 
-    if (route === "creator") {
+    if (resolvedRoute === "creator") {
       await refreshEvents();
     }
 
-    if (route === "control") {
+    if (resolvedRoute === "control") {
       if (!requireAuthRoute()) return;
       if (options.eventId) {
         await ensureEvent(options.eventId);
@@ -1060,59 +1069,77 @@ function controlRoomView(eventId) {
 /* ── View: Account ── */
 
 function accountView() {
-  const isLoggedIn = Boolean(state.user);
+  if (!state.user) {
+    return signInView();
+  }
 
   return `
     <div style="max-width:720px;margin:0 auto;">
       <h2 class="section-title" style="text-align:center;">Account</h2>
-      <p class="section-subtitle" style="text-align:center;">${
-        isLoggedIn
-          ? `Signed in as <strong style="color:var(--ink);">${h(state.user.displayName)}</strong> (${h(state.user.role)})`
-          : "Sign in or create an account to get started"
-      }</p>
+      <p class="section-subtitle" style="text-align:center;">
+        Signed in as <strong style="color:var(--ink);">${h(state.user.displayName)}</strong> (${h(state.user.role)})
+      </p>
 
-      ${isLoggedIn ? `
-        <section class="panel" style="margin-bottom:1.25rem;">
-          <h3>Settings</h3>
-          <form id="apiBaseForm" style="margin-top:0.75rem;">
-            <label>API Base URL<input name="apiBase" value="${h(state.apiBase)}" required /></label>
-            <div class="row">
-              <button class="btn" type="submit">Save</button>
-              <button class="btn ghost" data-action="logout">Sign Out</button>
-            </div>
-          </form>
-        </section>
-      ` : `
-        <section class="layout" style="grid-template-columns:1fr 1fr;">
-          <article class="panel">
-            <h3>Sign Up</h3>
-            <form id="signupForm" style="margin-top:0.75rem;">
-              <label>Email<input name="email" type="email" placeholder="you@example.com" required /></label>
-              <label>Password<input name="password" type="password" minlength="8" placeholder="Min 8 characters" required /></label>
-              <label>Display Name<input name="displayName" placeholder="Your name" required /></label>
-              <label>Role
-                <select name="role">
-                  <option value="fan">Fan</option>
-                  <option value="creator">Creator</option>
-                  <option value="org_admin">Org Admin</option>
-                  <option value="support_admin">Support Admin</option>
-                </select>
-              </label>
-              <label>Organization ID<input name="organizationId" placeholder="Optional" /></label>
-              <button class="btn primary" type="submit" style="width:100%;justify-content:center;margin-top:0.25rem;">Create Account</button>
-            </form>
-          </article>
+      <section class="panel" style="margin-bottom:1.25rem;">
+        <h3>Settings</h3>
+        <form id="apiBaseForm" style="margin-top:0.75rem;">
+          <label>API Base URL<input name="apiBase" value="${h(state.apiBase)}" required /></label>
+          <div class="row">
+            <button class="btn" type="submit">Save</button>
+            <button class="btn ghost" data-action="logout">Sign Out</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
 
-          <aside class="panel">
-            <h3>Login</h3>
-            <form id="loginForm" style="margin-top:0.75rem;">
-              <label>Email<input name="email" type="email" placeholder="you@example.com" required /></label>
-              <label>Password<input name="password" type="password" minlength="8" required /></label>
-              <button class="btn primary" type="submit" style="width:100%;justify-content:center;margin-top:0.25rem;">Sign In</button>
-            </form>
-          </aside>
-        </section>
-      `}
+function signInView() {
+  return `
+    <div style="max-width:520px;margin:0 auto;">
+      <section class="panel">
+        <h2 class="section-title" style="text-align:center;">Sign In</h2>
+        <p class="section-subtitle" style="text-align:center;">Welcome back. Access your events and library.</p>
+        <form id="loginForm" style="margin-top:0.75rem;">
+          <label>Email<input name="email" type="email" placeholder="you@example.com" required /></label>
+          <label>Password<input name="password" type="password" minlength="8" required /></label>
+          <button class="btn primary" type="submit" style="width:100%;justify-content:center;margin-top:0.25rem;">Sign In</button>
+        </form>
+        <div class="row" style="justify-content:center;margin-top:0.85rem;">
+          <span class="muted">New here?</span>
+          <button class="btn ghost" data-action="go-signup">Create Account</button>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function signUpView() {
+  return `
+    <div style="max-width:620px;margin:0 auto;">
+      <section class="panel">
+        <h2 class="section-title" style="text-align:center;">Create Account</h2>
+        <p class="section-subtitle" style="text-align:center;">Set up your fan or creator profile.</p>
+        <form id="signupForm" style="margin-top:0.75rem;">
+          <label>Email<input name="email" type="email" placeholder="you@example.com" required /></label>
+          <label>Password<input name="password" type="password" minlength="8" placeholder="Min 8 characters" required /></label>
+          <label>Display Name<input name="displayName" placeholder="Your name" required /></label>
+          <label>Role
+            <select name="role">
+              <option value="fan">Fan</option>
+              <option value="creator">Creator</option>
+              <option value="org_admin">Org Admin</option>
+              <option value="support_admin">Support Admin</option>
+            </select>
+          </label>
+          <label>Organization ID<input name="organizationId" placeholder="Optional" /></label>
+          <button class="btn primary" type="submit" style="width:100%;justify-content:center;margin-top:0.25rem;">Create Account</button>
+        </form>
+        <div class="row" style="justify-content:center;margin-top:0.85rem;">
+          <span class="muted">Already have an account?</span>
+          <button class="btn ghost" data-action="go-signin">Sign In</button>
+        </div>
+      </section>
     </div>
   `;
 }
@@ -1126,6 +1153,9 @@ function renderRouteContent() {
   if (state.route === "watch") return watchView(state.routeEventId);
   if (state.route === "creator") return creatorView();
   if (state.route === "control") return controlRoomView(state.routeEventId);
+  if (state.route === "signin") return signInView();
+  if (state.route === "signup") return signUpView();
+  if (state.route === "account") return accountView();
   return accountView();
 }
 
@@ -1237,7 +1267,19 @@ function attachEventHandlers() {
 
   [...app.querySelectorAll("[data-action='go-account']")].forEach((button) => {
     button.addEventListener("click", async () => {
-      await navigateTo("account");
+      await navigateTo(state.user ? "account" : "signin");
+    });
+  });
+
+  [...app.querySelectorAll("[data-action='go-signin']")].forEach((button) => {
+    button.addEventListener("click", async () => {
+      await navigateTo("signin");
+    });
+  });
+
+  [...app.querySelectorAll("[data-action='go-signup']")].forEach((button) => {
+    button.addEventListener("click", async () => {
+      await navigateTo("signup");
     });
   });
 
