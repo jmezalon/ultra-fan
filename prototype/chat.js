@@ -1,13 +1,15 @@
 import { state, apiRequest } from "./state.js";
-import { h } from "./utils.js";
+import { h, renderAvatarMarkup } from "./utils.js";
 import { setNotice } from "./ui.js";
 
 export function normalizeChatMessage(raw) {
+  const profileImageUrl = raw?.userProfileImageUrl ?? raw?.user?.profileImageUrl ?? null;
   return {
     id: String(raw?.id || ""),
     eventId: String(raw?.eventId || ""),
     userId: String(raw?.userId || ""),
     userDisplayName: String(raw?.userDisplayName || raw?.user || "Guest"),
+    userProfileImageUrl: profileImageUrl ? String(profileImageUrl) : null,
     body: String(raw?.body || raw?.message || ""),
     createdAt: String(raw?.createdAt || new Date().toISOString()),
   };
@@ -42,8 +44,20 @@ export function renderChatMessagesMarkup(eventId) {
 
   return messages
     .map(
-      (item) =>
-        `<div class="chat-message"><strong>${h(item.userDisplayName)}</strong> ${h(item.body)}</div>`,
+      (item) => `
+        <div class="chat-message">
+          ${renderAvatarMarkup({
+            displayName: item.userDisplayName,
+            imageUrl: item.userProfileImageUrl,
+            className: "avatar avatar-chat",
+            alt: `${item.userDisplayName} profile picture`,
+          })}
+          <div class="chat-message-content">
+            <strong>${h(item.userDisplayName)}</strong>
+            <p>${h(item.body)}</p>
+          </div>
+        </div>
+      `,
     )
     .join("");
 }

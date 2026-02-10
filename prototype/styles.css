@@ -182,10 +182,13 @@ body {
   color: var(--ink-secondary);
 }
 
-.user-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-full);
+.avatar {
+  --avatar-size: 32px;
+  position: relative;
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  border-radius: 50%;
+  overflow: hidden;
   background: linear-gradient(135deg, var(--primary), var(--accent));
   display: grid;
   place-items: center;
@@ -193,6 +196,41 @@ body {
   font-size: 0.75rem;
   color: white;
   text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-fallback {
+  line-height: 1;
+}
+
+.avatar-sm {
+  --avatar-size: 32px;
+}
+
+.avatar-chat {
+  --avatar-size: 28px;
+}
+
+.avatar-host {
+  --avatar-size: 56px;
+  color: var(--ink-secondary);
+  background: var(--surface-3);
+}
+
+.avatar-xl {
+  --avatar-size: 64px;
+}
+
+.user-avatar {
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* ── Buttons ── */
@@ -648,14 +686,29 @@ main {
 }
 
 .chat-message {
-  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin-bottom: 0.65rem;
   font-size: 0.85rem;
   color: var(--ink-secondary);
 }
 
+.chat-message-content {
+  min-width: 0;
+}
+
 .chat-message strong {
+  display: block;
   color: var(--primary);
   font-weight: 600;
+  line-height: 1.2;
+}
+
+.chat-message p {
+  margin: 0.12rem 0 0;
+  color: var(--ink-secondary);
+  overflow-wrap: anywhere;
 }
 
 .chat-input-row {

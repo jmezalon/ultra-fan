@@ -7,6 +7,31 @@ export function h(value) {
     .replace(/'/g, "&#39;");
 }
 
+export function getInitials(displayName, fallback = "U") {
+  const words = String(displayName || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (!words.length) return fallback;
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0]}${words[1][0]}`.toUpperCase();
+}
+
+export function renderAvatarMarkup({
+  displayName,
+  imageUrl,
+  className = "avatar avatar-sm",
+  alt = "",
+}) {
+  const initials = getInitials(displayName);
+  const image = imageUrl
+    ? `<img src="${h(imageUrl)}" alt="${h(alt)}" loading="lazy" decoding="async" onerror="this.remove()" />`
+    : "";
+
+  return `<span class="${className}"><span class="avatar-fallback">${h(initials)}</span>${image}</span>`;
+}
+
 export function formatDateTime(iso) {
   if (!iso) return "TBD";
   return new Date(iso).toLocaleString([], {

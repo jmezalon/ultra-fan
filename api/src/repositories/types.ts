@@ -39,6 +39,7 @@ export interface CreateChatMessageInput {
   eventId: string;
   userId: string;
   userDisplayName: string;
+  userProfileImageUrl?: string | null;
   body: string;
 }
 
