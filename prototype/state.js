@@ -186,6 +186,12 @@ export async function ensureEvent(eventId) {
   return data.event;
 }
 
+export async function refreshEvent(eventId) {
+  const data = await apiRequest(`/events/${eventId}`, { auth: false });
+  mergeEvent(data.event);
+  return data.event;
+}
+
 export async function refreshEvents() {
   const data = await apiRequest("/events", { auth: false });
   const publishedEvents = Array.isArray(data.events) ? data.events : [];
