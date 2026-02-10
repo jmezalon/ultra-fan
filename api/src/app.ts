@@ -576,6 +576,7 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
 
       const offerSdp = typeof req.body === "string" ? req.body.trim() : "";
       console.log("[WHIP DEBUG] req.body type:", typeof req.body, "length:", typeof req.body === "string" ? req.body.length : "N/A");
+      console.log("[WHIP DEBUG] SDP_B64:", Buffer.from(offerSdp, "utf-8").toString("base64"));
       if (!offerSdp) {
         res.status(400).json({ error: "Missing SDP offer body." });
         return;
