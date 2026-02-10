@@ -590,7 +590,13 @@ function render() {
     const streamInfo = state.streamInfoByEvent[state.routeEventId];
     const event = getEvent(state.routeEventId);
     if (streamInfo?.hlsUrl && event?.broadcastState === "live") {
-      initHlsPlayer(streamInfo.hlsUrl);
+      const eventId = state.routeEventId;
+      initHlsPlayer(streamInfo.hlsUrl, {
+        onStreamStopped: () => {
+          delete state.streamInfoByEvent[eventId];
+          stopWatchPolling();
+        },
+      });
       startWatchPolling(state.routeEventId);
     } else {
       stopWatchPolling();

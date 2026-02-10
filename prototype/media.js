@@ -97,7 +97,7 @@ export function destroyPlayer() {
   }
 }
 
-export function initHlsPlayer(hlsUrl) {
+export function initHlsPlayer(hlsUrl, { onStreamStopped } = {}) {
   destroyPlayer();
 
   const video = document.getElementById("hlsPlayer");
@@ -105,14 +105,35 @@ export function initHlsPlayer(hlsUrl) {
   if (!video) return;
   attachWakeLock(video);
 
+  function showStopped() {
+    detachWakeLock();
+    if (overlay) {
+      overlay.style.display = "";
+      overlay.querySelector(".player-status").textContent =
+        "Broadcast has stopped.";
+    }
+    if (onStreamStopped) onStreamStopped();
+  }
+
   // Safari supports native HLS
   if (video.canPlayType("application/vnd.apple.mpegurl")) {
     video.src = hlsUrl;
+    let nativeErrorCount = 0;
+    const MAX_NATIVE_ERRORS = 3;
+
     video.addEventListener("loadedmetadata", () => {
+      nativeErrorCount = 0;
       if (overlay) overlay.style.display = "none";
       video.play().catch(() => {});
     });
     video.addEventListener("error", () => {
+      nativeErrorCount++;
+      if (nativeErrorCount > MAX_NATIVE_ERRORS) {
+        video.removeAttribute("src");
+        video.load();
+        showStopped();
+        return;
+      }
       if (overlay) {
         overlay.querySelector(".player-status").textContent =
           "Stream unavailable. The creator may not be broadcasting yet.";
@@ -134,11 +155,20 @@ export function initHlsPlayer(hlsUrl) {
     enableWorker: true,
     lowLatencyMode: true,
     backBufferLength: 30,
+    manifestLoadingMaxRetry: 2,
+    manifestLoadingRetryDelay: 2000,
+    manifestLoadingMaxRetryTimeout: 8000,
+    levelLoadingMaxRetry: 2,
+    levelLoadingRetryDelay: 2000,
+    levelLoadingMaxRetryTimeout: 8000,
+    fragLoadingMaxRetry: 3,
+    fragLoadingRetryDelay: 2000,
+    fragLoadingMaxRetryTimeout: 8000,
   });
 
   activeHlsPlayer = hls;
   let networkRetries = 0;
-  const MAX_NETWORK_RETRIES = 8;
+  const MAX_NETWORK_RETRIES = 3;
 
   hls.loadSource(hlsUrl);
   hls.attachMedia(video);
@@ -157,12 +187,7 @@ export function initHlsPlayer(hlsUrl) {
           if (networkRetries > MAX_NETWORK_RETRIES) {
             activeHlsPlayer = null;
             hls.destroy();
-            detachWakeLock();
-            if (overlay) {
-              overlay.style.display = "";
-              overlay.querySelector(".player-status").textContent =
-                "Broadcast has stopped.";
-            }
+            showStopped();
             return;
           }
           if (overlay) {
