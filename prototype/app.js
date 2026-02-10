@@ -348,7 +348,7 @@ function attachEventHandlers() {
       showToast("Stream key not available yet.", "error");
       return;
     }
-    await startCameraBroadcast(whipUrl);
+    await startCameraBroadcast(whipUrl, state.token);
   });
 
   bindAction("stop-camera", () => {
