@@ -27,9 +27,10 @@ const loginSchema = z.object({
   password: z.string().min(8),
 });
 
-const imageUrlSchema = z.union([
+export const imageUrlSchema = z.union([
   z.string().url(),
   z.string().startsWith("data:image/"),
+  z.string().startsWith("/uploads/"),
 ]);
 
 const createEventSchema = z.object({
@@ -65,6 +66,7 @@ const updateCreatorProfileSchema = z.object({
 
 const CHAT_RETENTION_HOURS = 24;
 const CHAT_KEEPALIVE_MS = 15_000;
+const JSON_BODY_LIMIT = "8mb";
 
 const CREATOR_PROFILE_ROLES: Role[] = ["creator", "org_admin"];
 
@@ -75,14 +77,26 @@ const asyncHandler =
   (req: Request, res: Response, next: NextFunction) =>
     fn(req, res, next).catch(next);
 
+export function isPayloadTooLargeError(err: unknown) {
+  const payloadError = err as { type?: string; status?: number } | null;
+  return payloadError?.type === "entity.too.large" || payloadError?.status === 413;
+}
+
 export function buildApp(repo: Repository = new MemoryRepository()) {
   const app = express();
   app.use(cors());
-  app.use(express.json());
+  app.use(express.json({ limit: JSON_BODY_LIMIT }));
   const chatStreams = new Map<string, Set<Response>>();
   const sourceDir = path.dirname(fileURLToPath(import.meta.url));
   const clientDir = path.resolve(sourceDir, "../../prototype");
   const clientIndexPath = path.join(clientDir, "index.html");
+  const uploadsDir = path.resolve(sourceDir, "../../uploads");
+
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  // Compatibility for older image records that still reference /uploads/* paths.
+  app.use("/uploads", express.static(uploadsDir));
 
   const upload = multer({
     storage: multer.memoryStorage(),
@@ -632,6 +646,11 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
 
   // Global error handler – returns a proper JSON response instead of crashing.
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+    if (isPayloadTooLargeError(err)) {
+      res.status(413).json({ error: `Request payload too large. Keep image data under ${JSON_BODY_LIMIT}.` });
+      return;
+    }
+
     const isDbError =
       err.constructor?.name === "PrismaClientInitializationError" ||
       err.constructor?.name === "PrismaClientKnownRequestError" ||
