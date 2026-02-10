@@ -4,6 +4,7 @@ import express, { Request, Response } from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import multer from "multer";
 import { z } from "zod";
 import { signAccessToken, signPlaybackToken, verifyAccessToken } from "./auth.js";
 import { AuthedRequest, requireAuth, requireRole } from "./middleware.js";
@@ -26,6 +27,11 @@ const loginSchema = z.object({
   password: z.string().min(8),
 });
 
+const imageUrlSchema = z.union([
+  z.string().url(),
+  z.string().startsWith("/uploads/"),
+]);
+
 const createEventSchema = z.object({
   title: z.string().min(3),
   description: z.string().min(10),
@@ -35,7 +41,7 @@ const createEventSchema = z.object({
   priceUsd: z.number().min(0),
   replayHours: z.number().int().min(0).max(168),
   published: z.boolean().default(false),
-  imageUrl: z.string().url().optional(),
+  imageUrl: imageUrlSchema.optional(),
 });
 
 const updateEventSchema = createEventSchema.partial();
@@ -53,7 +59,7 @@ const updateCreatorProfileSchema = z.object({
   displayName: z.string().trim().min(2).max(80).optional(),
   bio: z.string().trim().max(1200).optional(),
   hometown: z.string().trim().max(80).optional(),
-  profileImageUrl: z.string().url().optional(),
+  profileImageUrl: imageUrlSchema.optional(),
   websiteUrl: z.string().url().optional(),
 });
 
@@ -70,6 +76,28 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
   const sourceDir = path.dirname(fileURLToPath(import.meta.url));
   const clientDir = path.resolve(sourceDir, "../../prototype");
   const clientIndexPath = path.join(clientDir, "index.html");
+
+  const uploadsDir = path.resolve(sourceDir, "../../uploads");
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  app.use("/uploads", express.static(uploadsDir));
+
+  const upload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, uploadsDir),
+      filename: (_req, file, cb) => {
+        const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+        const ext = path.extname(file.originalname);
+        cb(null, `${unique}${ext}`);
+      },
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+      cb(null, allowed.includes(file.mimetype));
+    },
+  });
 
   const chatCutoffIso = () =>
     new Date(Date.now() - CHAT_RETENTION_HOURS * 60 * 60 * 1000).toISOString();
@@ -154,6 +182,15 @@ export function buildApp(repo: Repository = new MemoryRepository()) {
     const trimmed = value.trim();
     return trimmed.length ? trimmed : null;
   }
+
+  app.post("/uploads", requireAuth, upload.single("file"), (req: AuthedRequest, res) => {
+    if (!req.file) {
+      res.status(400).json({ error: "No valid image file provided. Accepted types: JPEG, PNG, GIF, WebP." });
+      return;
+    }
+    const url = `/uploads/${req.file.filename}`;
+    res.status(201).json({ url });
+  });
 
   app.get("/health", (_req, res) => {
     res.json({ ok: true, service: "ultra-fan-api", now: nowIso() });
